@@ -70,6 +70,38 @@ class Project extends Model
         ])->all(), (int) $this->layout_seed);
     }
 
+    /**
+     * Each picture's window: the part of its cell that the white card leaves in view (the picture is drawn there
+     * and nowhere else), and where the picture sits in it — scaled to cover it, on the point chosen by hand if any.
+     * Cells the card hides whole are left out.
+     *
+     * @return list<array{id: int, x: float, y: float, w: float, h: float, cx: float, cy: float, img: array}>
+     */
+    public function windows(): array
+    {
+        $images = $this->images->keyBy('id');
+        $out = [];
+        foreach ($this->layout ?? [] as $c) {
+            $img = $images->get($c['id']);
+            $box = PageGeometry::visibleBox((float) $c['x'], (float) $c['y'], (float) $c['w'], (float) $c['h']);
+            if (! $img || ! $box) {
+                continue;
+            }
+            // a window on the page's own edge or on a neighbour reaches 0.4 pt further, so no viewer draws a seam
+            foreach (['w' => 'x', 'h' => 'y'] as $size => $pos) {
+                $end = $box[$pos] + $box[$size];
+                if ($end >= (float) $c[$pos] + (float) $c[$size] - 0.01 && $end < ($size === 'w' ? PageGeometry::W : PageGeometry::H) - 0.01) {
+                    $box[$size] += 0.4;
+                }
+            }
+            $box = array_map(fn ($v) => round($v, 2), $box);
+            $out[] = ['id' => $img->id, 'x' => $box['x'], 'y' => $box['y'], 'w' => $box['w'], 'h' => $box['h'], 'cx' => $box['cx'], 'cy' => $box['cy'],
+                'img' => PageGeometry::placeImage($box, (float) $img->width, (float) $img->height, $img->crop_x, $img->crop_y, $img->crop_zoom)];
+        }
+
+        return $out;
+    }
+
     /** What the page template needs, apart from the pictures. */
     public function content(): array
     {
@@ -122,6 +154,7 @@ class Project extends Model
                 'stats' => $this->stats ?? [],
                 'layout_seed' => $this->layout_seed,
                 'images' => $this->images->map->present()->values(),
+                'windows' => $this->layout ? array_map(fn ($w) => array_diff_key($w, ['img' => 1]), $this->windows()) : [],
             ];
         }
 

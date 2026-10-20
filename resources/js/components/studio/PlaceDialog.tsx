@@ -7,9 +7,10 @@ import { useT } from '@/lib/i18n';
 /**
  * "Which page should it be?" — every page of the current profile as a small picture, with a slot between each two.
  * Clicking a slot (or typing a number) chooses where the new page goes; it becomes page `at`.
+ * Moving a page that is already in the profile is the same choice, made among the other pages (`mode="move"`).
  */
-export function PlaceDialog({ pages, initial, busy, submitLabel, onSubmit, onClose }: {
-    pages: string[]; initial: number; busy: boolean; submitLabel: string; onSubmit: (at: number) => void; onClose: () => void;
+export function PlaceDialog({ pages, initial, busy, submitLabel, onSubmit, onClose, mode = 'place' }: {
+    pages: string[]; initial: number; busy: boolean; submitLabel: string; onSubmit: (at: number) => void; onClose: () => void; mode?: 'place' | 'move';
 }) {
     const { t, num } = useT();
     const total = pages.length + 1;
@@ -26,14 +27,14 @@ export function PlaceDialog({ pages, initial, busy, submitLabel, onSubmit, onClo
     );
 
     return (
-        <ScrollDialog open onClose={onClose} width={980} title={t('studio.place.title')}
+        <ScrollDialog open onClose={onClose} width={980} title={t(mode === 'move' ? 'studio.place.move_title' : 'studio.place.title')}
             footer={<>
-                <span className="muted" style={{ marginInlineEnd: 'auto' }}>{busy ? t('studio.place.working') : t('studio.place.becomes', { at: num(at), total: num(total) })}</span>
+                <span className="muted" style={{ marginInlineEnd: 'auto' }}>{busy ? t(mode === 'move' ? 'studio.place.move_working' : 'studio.place.working') : t('studio.place.becomes', { at: num(at), total: num(total) })}</span>
                 <Button variant="ghost" label={t('common.cancel')} onClick={onClose} isDisabled={busy} />
                 <Button variant="primary" label={submitLabel} isLoading={busy} onClick={() => onSubmit(at)} />
             </>}>
             <div className="studio-stack" style={{ gap: 14 }}>
-                <p className="muted" style={{ margin: 0 }}>{t('studio.place.hint')}</p>
+                <p className="muted" style={{ margin: 0 }}>{t(mode === 'move' ? 'studio.place.move_hint' : 'studio.place.hint')}</p>
                 <NumberInput label={t('studio.place.at')} isIntegerOnly min={1} max={total} value={at} onChange={(v) => setAt(Math.max(1, Math.min(total, Math.round(v || 1))))} width={160} />
                 <div className="studio-pages">
                     {pages.map((src, i) => (

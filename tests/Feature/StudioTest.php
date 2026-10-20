@@ -54,7 +54,7 @@ class StudioTest extends TestCase
                     $pages = $this->books[$job['base']] ?? 45;
                     foreach ($job['ops'] as $op) {
                         $this->ops[] = $op;
-                        $pages += ['insert' => 1, 'replace' => 0, 'remove' => -1][$op['op']];
+                        $pages += ['insert' => 1, 'replace' => 0, 'remove' => -1, 'move' => 0][$op['op']];
                     }
                     File::put($job['out'], '%PDF book');
                     $this->books[$job['out']] = $pages;
@@ -195,17 +195,64 @@ class StudioTest extends TestCase
         foreach (range(3, 11) as $id) {
             $this->assertGreaterThan($area($byId[$id]), $area($byId[2]), 'priority 2 outranks every ordinary picture');
         }
-        // the first-priority picture is mostly clear of the text card
-        $c = $byId[1];
-        $hidden = 0;
-        $n = 0;
-        for ($x = $c['x'] + 4; $x < $c['x'] + $c['w']; $x += 8) {
-            for ($y = $c['y'] + 4; $y < $c['y'] + $c['h']; $y += 8) {
-                $n++;
-                $hidden += PageGeometry::insideBlob($x, $y) ? 1 : 0;
+        // every picture shows, and little of what is drawn of it sits behind the text card — the first one least
+        foreach ($cells as $c) {
+            $v = PageGeometry::visibleBox($c['x'], $c['y'], $c['w'], $c['h']);
+            $this->assertNotNull($v, 'a picture is hidden whole behind the card');
+            $this->assertLessThan(0.3, $v['hidden']);
+        }
+        $first = $byId[1];
+        $this->assertLessThan(0.2, PageGeometry::visibleBox($first['x'], $first['y'], $first['w'], $first['h'])['hidden']);
+    }
+
+    public function test_pictures_are_drawn_only_where_they_show_and_cover_it_without_gaps(): void
+    {
+        $this->post(route('studio.login.attempt'), ['password' => 'first-pass-1']);
+        $project = $this->projectWithPictures(7);
+        $windows = $project->fresh()->load('images')->windows();
+        $this->assertCount(7, $windows);
+
+        foreach ($windows as $w) {
+            // the picture covers its window whatever the crop
+            $this->assertLessThanOrEqual(0.01, $w['img']['x']);
+            $this->assertLessThanOrEqual(0.01, $w['img']['y']);
+            $this->assertGreaterThanOrEqual($w['w'] - 0.02, $w['img']['x'] + $w['img']['w']);
+            $this->assertGreaterThanOrEqual($w['h'] - 0.02, $w['img']['y'] + $w['img']['h']);
+        }
+        // every point of the page outside the card is under exactly one window: no gap, no overlap
+        for ($x = 1.5; $x < 960; $x += 7) {
+            for ($y = 1.5; $y < 540; $y += 7) {
+                if (PageGeometry::insideBlob($x, $y)) {
+                    continue;
+                }
+                $under = array_filter($windows, fn ($w) => $x >= $w['x'] && $x < $w['x'] + $w['w'] && $y >= $w['y'] && $y < $w['y'] + $w['h']);
+                $this->assertCount(1, $under, "point $x,$y");
             }
         }
-        $this->assertLessThan(0.15, $hidden / $n);
+    }
+
+    public function test_the_visible_part_of_a_picture_is_chosen_by_hand_and_can_go_back_to_automatic(): void
+    {
+        $this->post(route('studio.login.attempt'), ['password' => 'first-pass-1']);
+        $this->profile();
+        $project = $this->projectWithPictures(2);
+        $this->post(route('studio.projects.approve', $project), ['at' => 3]);
+        $image = $project->images()->first();
+        $before = collect($project->fresh()->load('images')->windows())->firstWhere('id', $image->id);
+
+        $this->put(route('studio.images.crop', $image), ['x' => 0.1, 'y' => 0.9, 'zoom' => 2])->assertSessionHasNoErrors();
+        $image->refresh();
+        $this->assertSame([0.1, 0.9, 2.0], [$image->crop_x, $image->crop_y, $image->crop_zoom]);
+        $this->assertTrue($project->fresh()->profile_stale, 'the page in the profile is out of date');
+        $after = collect($project->fresh()->load('images')->windows())->firstWhere('id', $image->id);
+        $this->assertEqualsWithDelta($before['img']['w'] * 2, $after['img']['w'], 0.05);     // zoomed in twice
+        $this->assertSame([$before['x'], $before['y'], $before['w'], $before['h']], [$after['x'], $after['y'], $after['w'], $after['h']]);
+        $this->assertStringContainsString('"crop":{"x":0.1,"y":0.9,"zoom":2', json_encode($image->present()));
+
+        $this->put(route('studio.images.crop', $image), ['x' => 2, 'zoom' => 9])->assertSessionHasErrors(['x', 'zoom']);
+        $this->put(route('studio.images.crop', $image), ['zoom' => null]);
+        $this->assertNull($image->fresh()->crop_zoom);
+        $this->assertNull($image->fresh()->present()['crop']);
     }
 
     public function test_the_preview_is_the_page_and_leaves_out_what_is_empty(): void
@@ -277,6 +324,40 @@ class StudioTest extends TestCase
 
         $this->get(route('studio.profile'))->assertInertia(fn (Assert $p) => $p->component('Profile')
             ->has('versions', 6)->where('current.pages', 45)->where('placed.20.id', $a->public_id));
+    }
+
+    public function test_an_approved_page_can_be_moved_and_the_pages_between_shift_with_it(): void
+    {
+        $this->post(route('studio.login.attempt'), ['password' => 'first-pass-1']);
+        $this->profile();
+        [$a, $b, $c] = [$this->projectWithPictures(1), $this->projectWithPictures(1), $this->projectWithPictures(1)];
+        $this->post(route('studio.projects.approve', $a), ['at' => 5]);
+        $this->post(route('studio.projects.approve', $b), ['at' => 10]);
+        $this->post(route('studio.projects.approve', $c), ['at' => 20]);
+        $this->put(route('studio.projects.update', $c), ['client' => 'تعديل', 'title' => '', 'stats' => []]);
+        $pages = Version::current()->pages;
+        $at = fn () => [$a->fresh()->profile_page, $b->fresh()->profile_page, $c->fresh()->profile_page];
+
+        // later in the book: A leaves 5, everything up to 15 moves up one
+        $this->post(route('studio.projects.move', $a), ['to' => 15])->assertSessionHas('success', 'ui.studio.moved');
+        $this->assertSame([15, 9, 20], $at());
+        $this->assertSame(['move', $pages], [Version::current()->source, Version::current()->pages]);
+        $this->assertSame(['op' => 'move', 'page' => 5, 'to' => 15], last($this->app->make(PdfEngine::class)->ops));
+
+        // earlier in the book: C goes to 2, everything from 2 to 19 moves down one; its edit is still waiting
+        $this->post(route('studio.projects.move', $c), ['to' => 2]);
+        $this->assertSame([16, 10, 2], $at());
+        $this->assertTrue($c->fresh()->profile_stale);
+
+        // past the end means the last page; the same place changes nothing
+        $this->post(route('studio.projects.move', $b), ['to' => 999]);
+        $this->assertSame([15, $pages, 2], $at());
+        $versions = Version::count();
+        $this->post(route('studio.projects.move', $b), ['to' => $pages]);
+        $this->assertSame($versions, Version::count());
+
+        $draft = $this->projectWithPictures(1);
+        $this->post(route('studio.projects.move', $draft), ['to' => 3])->assertSessionHas('error.code', 'portfolio_not_in_profile');
     }
 
     public function test_deleting_an_approved_project_takes_its_page_out_of_the_profile(): void

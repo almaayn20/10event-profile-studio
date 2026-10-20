@@ -6,6 +6,7 @@ use App\Exceptions\UserFacingException;
 use App\Models\Project;
 use App\Models\Version;
 use App\Services\Studio;
+use App\Support\PageGeometry;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use Inertia\Inertia;
@@ -44,6 +45,7 @@ class ProjectController extends Controller
             ] : null,
             'suggestedAt' => $this->suggestedAt($current),
             'defaults' => Project::defaults(),
+            'card' => PageGeometry::BLOB,
         ]);
     }
 
@@ -139,6 +141,15 @@ class ProjectController extends Controller
         $project->forceFill(['status' => 'draft', 'approved_at' => null, 'profile_version_id' => null, 'profile_page' => null])->save();
 
         return back()->with('success', 'ui.studio.unapproved');
+    }
+
+    /** Change the page's place in the profile after approval: the same page, at another number. */
+    public function move(Request $request, Project $project)
+    {
+        $data = $request->validate(['to' => ['required', 'integer', 'min:1', 'max:2000']]);
+        $this->studio->move($project, (int) $data['to']);
+
+        return back()->with('success', 'ui.studio.moved');
     }
 
     /** The page is already in an uploaded profile: remember on which page, change nothing in the file. */

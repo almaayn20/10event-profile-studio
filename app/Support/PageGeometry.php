@@ -79,6 +79,107 @@ final class PageGeometry
         return $poly;
     }
 
+    /**
+     * Where the card crosses the horizontal line at $y: [left, right], or null where the line misses it. The card is
+     * a single bump, so every line meets it at most once.
+     *
+     * @return array{0: float, 1: float}|null
+     */
+    public static function blobSpan(float $y): ?array
+    {
+        static $rows = [];
+        $key = (string) round($y, 2);
+        if (array_key_exists($key, $rows)) {
+            return $rows[$key];
+        }
+        $poly = self::blobPolygon();
+        $n = count($poly);
+        $xs = [];
+        for ($i = 0, $j = $n - 1; $i < $n; $j = $i++) {
+            [$xi, $yi] = $poly[$i];
+            [$xj, $yj] = $poly[$j];
+            if (($yi > $y) !== ($yj > $y)) {
+                $xs[] = $xi + ($y - $yi) * ($xj - $xi) / ($yj - $yi);
+            }
+        }
+
+        return $rows[$key] = $xs ? [min($xs), max($xs)] : null;
+    }
+
+    /**
+     * The part of a rectangle the card leaves in view: its bounding box (x, y, w, h), the middle of what shows
+     * (cx, cy, from the box's corner) and how much of the box the card still covers (hidden, 0–1); null when the
+     * card hides it all. Rows are sampled every $step points; the box is then grown by $pad towards the card (never
+     * past the rectangle), so a picture drawn in it always reaches under the card's edge and leaves no gap.
+     *
+     * @return array{x: float, y: float, w: float, h: float, cx: float, cy: float, hidden: float, visible: float}|null
+     */
+    public static function visibleBox(float $x, float $y, float $w, float $h, float $step = 2.0, float $pad = 4.0): ?array
+    {
+        $x1 = $x + $w;
+        $y1 = $y + $h;
+        $rows = max(1, (int) ceil($h / $step));
+        $dy = $h / $rows;
+        $vx0 = INF;
+        $vx1 = -INF;
+        $vy0 = INF;
+        $vy1 = -INF;
+        $area = 0.0;
+        $mx = 0.0;
+        $my = 0.0;
+        for ($r = 0; $r < $rows; $r++) {
+            $ry = $y + ($r + 0.5) * $dy;
+            $span = self::blobSpan($ry);
+            // the visible pieces of this row: left of the card and right of it
+            $pieces = $span === null ? [[$x, $x1]] : array_filter([[$x, min($x1, $span[0])], [max($x, $span[1]), $x1]], fn ($p) => $p[1] - $p[0] > 0.01);
+            foreach ($pieces as [$a, $b]) {
+                $vx0 = min($vx0, $a);
+                $vx1 = max($vx1, $b);
+                $vy0 = min($vy0, $ry - $dy / 2);
+                $vy1 = max($vy1, $ry + $dy / 2);
+                $len = ($b - $a) * $dy;
+                $area += $len;
+                $mx += ($a + $b) / 2 * $len;
+                $my += $ry * $len;
+            }
+        }
+        if ($area < 1.0) {
+            return null;
+        }
+        // grow towards the card only: an edge that is the rectangle's own edge stays where it is
+        $vx0 = $vx0 - $x < 0.01 ? $x : max($x, $vx0 - $pad);
+        $vx1 = $x1 - $vx1 < 0.01 ? $x1 : min($x1, $vx1 + $pad);
+        $vy0 = $vy0 - $y < 0.01 ? $y : max($y, $vy0 - $pad);
+        $vy1 = $y1 - $vy1 < 0.01 ? $y1 : min($y1, $vy1 + $pad);
+        $box = ($vx1 - $vx0) * ($vy1 - $vy0);
+
+        return [
+            'x' => $vx0, 'y' => $vy0, 'w' => $vx1 - $vx0, 'h' => $vy1 - $vy0,
+            'cx' => $mx / $area - $vx0, 'cy' => $my / $area - $vy0,
+            'hidden' => max(0.0, 1 - $area / $box), 'visible' => $area,
+        ];
+    }
+
+    /**
+     * Where a picture sits in its window ($box: w, h, cx, cy) so it covers the window: scaled to cover it, times
+     * $zoom, with the picture's point ($fx, $fy — fractions of its width and height) on the middle of what shows,
+     * as near as the picture's edges allow. Returns left, top, width, height relative to the window.
+     *
+     * @return array{x: float, y: float, w: float, h: float}
+     */
+    public static function placeImage(array $box, float $iw, float $ih, ?float $fx = null, ?float $fy = null, ?float $zoom = null): array
+    {
+        $iw = max(1.0, $iw);
+        $ih = max(1.0, $ih);
+        $s = max($box['w'] / $iw, $box['h'] / $ih) * max(1.0, $zoom ?? 1.0);
+        $dw = $iw * $s;
+        $dh = $ih * $s;
+        $left = min(0.0, max($box['w'] - $dw, $box['cx'] - ($fx ?? 0.5) * $dw));
+        $top = min(0.0, max($box['h'] - $dh, $box['cy'] - ($fy ?? 0.5) * $dh));
+
+        return ['x' => round($left, 2), 'y' => round($top, 2), 'w' => round($dw, 2), 'h' => round($dh, 2)];
+    }
+
     public static function insideBlob(float $x, float $y): bool
     {
         $poly = self::blobPolygon();

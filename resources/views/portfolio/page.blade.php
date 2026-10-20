@@ -4,7 +4,8 @@
     so a line of height L puts its baseline L/2 + 0.25 em below its top; the tops are worked out from the profile's baselines.
 
     $project  array: client, title, description, details_url, details_label, stats (list of {value, label})
-    $cells    list of {src, x, y, w, h} in points
+    $cells    list of {id, src, x, y, w, h, img: {x, y, w, h}} in points — each picture's window outside the card, and
+              where the picture sits in it (Project::windows)
     $fonts    ['medium' => url, 'bold' => url]
 --}}
 <!doctype html>
@@ -25,14 +26,16 @@
         font-kerning: normal; text-rendering: geometricPrecision;
     }
     .cell { position: absolute; overflow: hidden; }
-    .cell img { display: block; width: 100%; height: 100%; object-fit: cover; }
+    .cell img { position: absolute; display: block; max-width: none; }
     .frame { position: absolute; inset: 0; width: 960pt; height: 540pt; }
     .t { position: absolute; margin: 0; white-space: nowrap; }
-    .client { left: 293pt; width: 400pt; top: 278.16pt; font-size: 20.57pt; line-height: 26pt; font-weight: 700; text-align: center; }
-    .title-row { position: absolute; left: 293pt; width: 400pt; top: 310.2pt; display: flex; justify-content: center; }
+    /* the client and the title are centred on x = 493 pt; a long one is set smaller until it fits inside the card */
+    .client-row { position: absolute; left: 293pt; width: 400pt; top: 278.16pt; height: 26pt; display: flex; justify-content: center; }
+    .client { font-size: 20.57pt; line-height: 26pt; font-weight: 700; white-space: nowrap; }
+    .title-row { position: absolute; left: 193pt; width: 600pt; top: 310.2pt; height: 35.3pt; display: flex; justify-content: center; align-items: center; }
     .title {
-        min-width: 198.8pt; max-width: 400pt; height: 35.3pt; padding: 0 6pt 2.84pt; border-radius: 5.1pt; background: #000; color: #fff;
-        font-size: 22.28pt; line-height: 32.46pt; font-weight: 700; text-align: center; white-space: nowrap; overflow: hidden;
+        height: 35.3pt; padding: 0 9pt 2.84pt; border-radius: 5.1pt; background: #000; color: #fff;
+        font-size: 22.28pt; line-height: 32.46pt; font-weight: 700; text-align: center; white-space: nowrap;
     }
     .desc {
         margin: 0;
@@ -54,22 +57,21 @@
 <body>
 <div class="page" id="page">
     @foreach ($cells as $c)
-        {{-- each picture reaches 0.4 pt under its neighbour, so no viewer ever draws a hairline seam between them --}}
-        <div class="cell" style="left: {{ $c['x'] }}pt; top: {{ $c['y'] }}pt; width: {{ $c['w'] + 0.4 }}pt; height: {{ $c['h'] + 0.4 }}pt;">
-            <img src="{{ $c['src'] }}" alt="" style="object-position: {{ $c['focus'] ?? '50% 50%' }};">
+        <div class="cell" data-image="{{ $c['id'] }}" style="left: {{ $c['x'] }}pt; top: {{ $c['y'] }}pt; width: {{ $c['w'] }}pt; height: {{ $c['h'] }}pt;">
+            <img src="{{ $c['src'] }}" alt="" style="left: {{ $c['img']['x'] }}pt; top: {{ $c['img']['y'] }}pt; width: {{ $c['img']['w'] }}pt; height: {{ $c['img']['h'] }}pt;">
         </div>
     @endforeach
 
-    <svg class="frame" viewBox="0 0 960 540" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-        <path d="{{ \App\Support\PageGeometry::BLOB }}" fill="#FFFFFF" stroke="{{ \App\Support\PageGeometry::BROWN }}" stroke-width="2" stroke-miterlimit="10"/>
+    <svg class="frame" id="frame" viewBox="0 0 960 540" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <path id="card" d="{{ \App\Support\PageGeometry::BLOB }}" fill="#FFFFFF" stroke="{{ \App\Support\PageGeometry::BROWN }}" stroke-width="2" stroke-miterlimit="10"/>
         @include('portfolio.logo-event')
     </svg>
 
     @if (filled($project['client']))
-        <p class="t client">{{ $project['client'] }}</p>
+        <div class="client-row"><span class="client" id="client">{{ $project['client'] }}</span></div>
     @endif
     @if (filled($project['title']))
-        <div class="title-row"><div class="title">{{ $project['title'] }}</div></div>
+        <div class="title-row"><div class="title" id="title">{{ $project['title'] }}</div></div>
     @endif
     @if (filled($project['description']))
         <p class="desc" id="desc">{{ $project['description'] }}</p>
@@ -92,6 +94,59 @@
     @endif
 </div>
 <script>
+    // the client and the title stay inside the card: where the card is narrower than the line, the line is set smaller
+    // (the title's black box shrinks with it, about its middle) however long it is; the editor is told how much
+    (function () {
+        var poly = @json(\App\Support\PageGeometry::blobPolygon());
+        var CX = 493, PT = 0.75, MARGIN = 12;
+        function span(y) {
+            var xs = [];
+            for (var i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+                var a = poly[i], b = poly[j];
+                if ((a[1] > y) !== (b[1] > y)) xs.push(a[0] + (y - a[1]) * (b[0] - a[0]) / (b[1] - a[1]));
+            }
+            return xs.length ? [Math.min.apply(null, xs), Math.max.apply(null, xs)] : null;
+        }
+        // the widest line, centred on CX, that stays clear of the card's edge between y0 and y1
+        function room(y0, y1) {
+            var half = Infinity;
+            for (var y = y0; y <= y1; y += 1) {
+                var s = span(y);
+                half = Math.min(half, s ? Math.min(CX - s[0], s[1] - CX) - MARGIN : 0);
+            }
+            return Math.max(0, 2 * half);
+        }
+        function fit(el, base, apply, band) {
+            if (!el) return 1;
+            var top = document.getElementById('page').getBoundingClientRect().top;
+            for (var size = base; size >= 6; size = Math.round((size - 0.25) * 100) / 100) {
+                apply(size);
+                var r = el.getBoundingClientRect(), b = band(r, top);
+                if (r.width * PT <= room(b[0], b[1])) return size / base;
+            }
+            return 6 / base;
+        }
+        function go() {
+            var client = document.getElementById('client');
+            var root = document.documentElement;
+            root.dataset.clientScale = fit(client, 20.57, function (s) { client.style.fontSize = s + 'pt'; },
+                // the letters, not the line's empty top: from a third down to the bottom
+                function (r, top) { var y = (r.top - top) * PT, h = r.height * PT; return [y + h / 3, y + h]; });
+            var title = document.getElementById('title');
+            root.dataset.titleScale = fit(title, 22.28, function (s) {
+                var k = s / 22.28;
+                title.style.fontSize = s + 'pt';
+                title.style.height = (35.3 * k).toFixed(2) + 'pt';
+                title.style.lineHeight = (32.46 * k).toFixed(2) + 'pt';
+                title.style.padding = '0 ' + (9 * k).toFixed(2) + 'pt ' + (2.84 * k).toFixed(2) + 'pt';
+                title.style.borderRadius = (5.1 * k).toFixed(2) + 'pt';
+            }, function (r, top) { var y = (r.top - top) * PT, h = r.height * PT; return [y + 2, y + h - 2]; }).toFixed(2);
+            root.dataset.clientScale = Number(root.dataset.clientScale).toFixed(2);
+            root.dataset.titled = '1';
+        }
+        if (document.fonts && document.fonts.ready) document.fonts.ready.then(go); else go();
+    })();
+
     // a description longer than the card's six lines steps its type down (never below 9.5 pt) instead of being cut off
     (function () {
         var d = document.getElementById('desc');

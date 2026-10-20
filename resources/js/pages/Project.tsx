@@ -5,11 +5,12 @@ import { NumberInput } from '@astryxdesign/core/NumberInput';
 import { TextArea } from '@astryxdesign/core/TextArea';
 import { TextInput } from '@astryxdesign/core/TextInput';
 import { Link, router, useForm } from '@inertiajs/react';
-import { ArrowLeft, ArrowRight, BookPlus, Check, Download, Plus, RefreshCw, RotateCcw, Save, Trash2, Undo2, X } from 'lucide-react';
+import { ArrowLeft, ArrowRight, ArrowUpDown, BookPlus, Check, Download, Plus, RefreshCw, RotateCcw, Save, Trash2, Undo2, X } from 'lucide-react';
 import { useState } from 'react';
 import StudioLayout from '@/components/layout/StudioLayout';
+import { CropDialog } from '@/components/studio/CropDialog';
 import { ImagesPanel } from '@/components/studio/ImagesPanel';
-import { PagePreview, type Fit } from '@/components/studio/PagePreview';
+import { PagePreview, type Fit, type HeadFit } from '@/components/studio/PagePreview';
 import { PlaceDialog } from '@/components/studio/PlaceDialog';
 import { StatusBadges } from '@/components/studio/StatusBadges';
 import type { StudioProject, StudioStat, StudioVersion } from '@/components/studio/types';
@@ -21,9 +22,10 @@ interface Props {
     profile: (StudioVersion & { pages_urls: string[] }) | null;
     suggestedAt: number;
     defaults: { stats: StudioStat[]; details_label: string };
+    card: string;
 }
 
-export default function StudioEdit({ project, profile, suggestedAt, defaults }: Props) {
+export default function StudioEdit({ project, profile, suggestedAt, defaults, card }: Props) {
     const { t, dir } = useT();
     const form = useForm({
         client: project.client ?? '',
@@ -35,9 +37,13 @@ export default function StudioEdit({ project, profile, suggestedAt, defaults }: 
     });
     const d = form.data;
     const [fit, setFit] = useState<Fit>('ok');
-    const [dialog, setDialog] = useState<null | 'place' | 'link'>(null);
+    const [head, setHead] = useState<HeadFit>({ client: 1, title: 1 });
+    // set noticeably smaller to fit the card: say so, by how much
+    const smaller = (k: number) => (k < 0.8 ? { type: 'warning' as const, message: t('studio.edit.head_shrunk', { pct: Math.round(k * 100) }) } : undefined);
+    const [dialog, setDialog] = useState<null | 'place' | 'link' | 'move'>(null);
     const [busy, setBusy] = useState<string | null>(null);
     const [linkPage, setLinkPage] = useState<number>(1);
+    const [cropping, setCropping] = useState<number | null>(null);
 
     const err = (k: string) => ((form.errors as Record<string, string>)[k] ? { type: 'error' as const, message: (form.errors as Record<string, string>)[k] } : undefined);
     const setStat = (i: number, patch: Partial<StudioStat>) => form.setData('stats', d.stats.map((s, j) => (j === i ? { ...s, ...patch } : s)));
@@ -52,6 +58,15 @@ export default function StudioEdit({ project, profile, suggestedAt, defaults }: 
     };
 
     const images = project.images ?? [];
+    const windows = project.windows ?? [];
+    const cropImage = images.find((i) => i.id === cropping);
+    const cropWindow = windows.find((w) => w.id === cropping);
+    const saveCrop = (crop: { x: number; y: number; zoom: number } | null) => {
+        if (!cropping) return;
+        router.put(route('studio.images.crop', cropping), crop ?? { zoom: null }, {
+            preserveScroll: true, preserveState: true, onStart: () => setBusy('crop'), onFinish: () => setBusy(null), onSuccess: () => setCropping(null),
+        });
+    };
     const inProfile = project.in_profile;
     const pageTitle = project.title || project.client || t('studio.edit.title_new');
 
@@ -75,6 +90,9 @@ export default function StudioEdit({ project, profile, suggestedAt, defaults }: 
                         <Button variant="primary" icon={<RefreshCw size={16} />} label={t('studio.edit.refresh')} isLoading={busy === 'refresh'}
                             onClick={() => act('refresh', route('studio.projects.refresh', project.id))} />
                     )}
+                    {inProfile && profile && (
+                        <Button variant="secondary" icon={<ArrowUpDown size={16} />} label={t('studio.edit.move')} onClick={() => setDialog('move')} />
+                    )}
                 </div>
             </div>
 
@@ -91,14 +109,14 @@ export default function StudioEdit({ project, profile, suggestedAt, defaults }: 
 
             <div className="studio-editor">
                 <div className="studio-editor-form">
-                    <ImagesPanel projectId={project.id} images={images} />
+                    <ImagesPanel projectId={project.id} images={images} onCrop={(img) => windows.some((w) => w.id === img.id) && setCropping(img.id)} />
 
                     <Card padding={5}>
                         <div className="studio-stack" style={{ gap: 14 }}>
                             <h2 className="studio-h2">{t('studio.edit.texts')}</h2>
                             <div className="grid gap-[12px] sm:grid-cols-2">
-                                <TextInput width="100%" label={t('studio.edit.client')} value={d.client} onChange={(v) => form.setData('client', v)} status={err('client')} />
-                                <TextInput width="100%" label={t('studio.edit.title')} description={t('studio.edit.title_hint')} value={d.title} onChange={(v) => form.setData('title', v)} status={err('title')} />
+                                <TextInput width="100%" label={t('studio.edit.client')} value={d.client} onChange={(v) => form.setData('client', v)} status={err('client') ?? (d.client ? smaller(head.client) : undefined)} />
+                                <TextInput width="100%" label={t('studio.edit.title')} description={t('studio.edit.title_hint')} value={d.title} onChange={(v) => form.setData('title', v)} status={err('title') ?? (d.title ? smaller(head.title) : undefined)} />
                             </div>
                             <TextArea width="100%" label={t('studio.edit.description')} description={t('studio.edit.description_hint')} rows={7} maxLength={2000}
                                 value={d.description} onChange={(v) => form.setData('description', v)}
@@ -156,8 +174,9 @@ export default function StudioEdit({ project, profile, suggestedAt, defaults }: 
                             {inProfile && <span className="muted">{t('studio.edit.in_profile', { page: project.profile_page })}</span>}
                         </div>
                         <PagePreview url={route('studio.projects.preview', project.id)} data={d}
-                            version={`${project.layout_seed}-${images.map((i) => `${i.id}:${i.priority ?? 0}`).join(',')}`} onFit={setFit} />
-                        <p className="fine" style={{ marginTop: 0 }}>{t('studio.edit.preview_hint')}</p>
+                            version={`${project.layout_seed}-${images.map((i) => `${i.id}:${i.priority ?? 0}:${i.crop ? `${i.crop.x},${i.crop.y},${i.crop.zoom}` : ''}`).join(',')}`}
+                            onFit={setFit} onPick={setCropping} onHeadFit={setHead} />
+                        <p className="fine" style={{ marginTop: 0 }}>{t('studio.edit.preview_hint')} {images.length > 0 && t('studio.crop.preview_hint')}</p>
                     </div>
                 </aside>
             </div>
@@ -167,6 +186,15 @@ export default function StudioEdit({ project, profile, suggestedAt, defaults }: 
                     submitLabel={project.status === 'draft' ? t('studio.place.submit') : t('studio.place.submit_place')}
                     onSubmit={(at) => act('approve', route('studio.projects.approve', project.id), { at }, () => setDialog(null))}
                     onClose={() => busy !== 'approve' && setDialog(null)} />
+            )}
+            {cropImage && cropWindow && (
+                <CropDialog key={cropImage.id} image={cropImage} win={cropWindow} card={card} busy={busy === 'crop'} onSave={saveCrop} onClose={() => setCropping(null)} />
+            )}
+            {dialog === 'move' && profile && project.profile_page && (
+                <PlaceDialog mode="move" pages={profile.pages_urls.filter((_, i) => i + 1 !== project.profile_page)} initial={project.profile_page}
+                    busy={busy === 'move'} submitLabel={t('studio.place.move_submit')}
+                    onSubmit={(to) => act('move', route('studio.projects.move', project.id), { to }, () => setDialog(null))}
+                    onClose={() => busy !== 'move' && setDialog(null)} />
             )}
             {dialog === 'place' && !profile && (
                 <ScrollDialog open onClose={() => setDialog(null)} width={520} title={t('studio.place.title')}

@@ -2,7 +2,7 @@ import { Button } from '@astryxdesign/core/Button';
 import { Card } from '@astryxdesign/core/Card';
 import { ProgressBar } from '@astryxdesign/core/ProgressBar';
 import { router } from '@inertiajs/react';
-import { ImagePlus, Shuffle, Trash2 } from 'lucide-react';
+import { Crop, ImagePlus, Shuffle, Trash2 } from 'lucide-react';
 import { useRef, useState } from 'react';
 import { useUploadGuard } from '@/lib/upload';
 import { useT } from '@/lib/i18n';
@@ -10,7 +10,7 @@ import { lighten } from './compress';
 import type { StudioImage } from './types';
 
 /** The page's pictures: add any number, mark up to three as 1 · 2 · 3 (the large ones), remove, rearrange. */
-export function ImagesPanel({ projectId, images }: { projectId: string; images: StudioImage[] }) {
+export function ImagesPanel({ projectId, images, onCrop }: { projectId: string; images: StudioImage[]; onCrop?: (img: StudioImage) => void }) {
     const { t, num } = useT();
     const input = useRef<HTMLInputElement>(null);
     const guard = useUploadGuard(25);
@@ -83,6 +83,11 @@ export function ImagesPanel({ projectId, images }: { projectId: string; images: 
                                 <div className="studio-image-pic">
                                     <img src={img.url} alt="" loading="lazy" />
                                     {img.priority && <span className="studio-image-rank">{num(img.priority)}</span>}
+                                    {onCrop && (
+                                        <button type="button" className="studio-image-remove studio-image-crop" aria-label={t('studio.crop.open')} title={t('studio.crop.open')} onClick={() => onCrop(img)}>
+                                            <Crop size={14} />
+                                        </button>
+                                    )}
                                     <button type="button" className="studio-image-remove" aria-label={t('studio.edit.remove_image')} title={t('studio.edit.remove_image')} onClick={() => remove(img)}>
                                         <Trash2 size={14} />
                                     </button>

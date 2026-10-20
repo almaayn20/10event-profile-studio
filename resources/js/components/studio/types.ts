@@ -1,6 +1,11 @@
 export interface StudioStat { value: string; label: string }
 
-export interface StudioImage { id: number; width: number; height: number; bytes: number; priority: 1 | 2 | 3 | null; url: string }
+export interface StudioCrop { x: number; y: number; zoom: number }
+
+export interface StudioImage { id: number; width: number; height: number; bytes: number; priority: 1 | 2 | 3 | null; crop: StudioCrop | null; url: string }
+
+/** A picture's window on the page, in points: the part of its cell outside the white card; cx, cy = the middle of what shows. */
+export interface StudioWindow { id: number; x: number; y: number; w: number; h: number; cx: number; cy: number }
 
 export interface StudioProject {
     id: string;
@@ -21,10 +26,11 @@ export interface StudioProject {
     stats?: StudioStat[];
     layout_seed?: number;
     images?: StudioImage[];
+    windows?: StudioWindow[];
 }
 
 export interface StudioVersion {
-    id: number; name: string; pages: number; bytes: number; source: 'upload' | 'insert' | 'update' | 'remove' | 'restore';
+    id: number; name: string; pages: number; bytes: number; source: 'upload' | 'insert' | 'update' | 'remove' | 'move' | 'restore';
     note: string | null; project_id: number | null; created_at: string | null;
     thumb?: string; pages_urls?: string[];
 }

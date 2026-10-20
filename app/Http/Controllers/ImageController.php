@@ -43,6 +43,30 @@ class ImageController extends Controller
         return back();
     }
 
+    /** The part of the picture that shows on the page, chosen by hand; empty puts it back to the middle. */
+    public function crop(Request $request, Image $image)
+    {
+        $data = $request->validate([
+            'x' => ['nullable', 'numeric', 'between:0,1'],
+            'y' => ['nullable', 'numeric', 'between:0,1'],
+            'zoom' => ['nullable', 'numeric', 'between:1,4'],
+        ]);
+        $reset = ($data['zoom'] ?? null) === null;
+        $image->update([
+            'crop_x' => $reset ? null : round((float) ($data['x'] ?? 0.5), 4),
+            'crop_y' => $reset ? null : round((float) ($data['y'] ?? 0.5), 4),
+            'crop_zoom' => $reset ? null : round((float) $data['zoom'], 3),
+        ]);
+        $project = $image->project;
+        if ($project->inProfile()) {
+            $project->profile_stale = true;
+        }
+        $project->touch();
+        $project->save();
+
+        return back();
+    }
+
     public function destroy(Image $image)
     {
         $project = $image->project;

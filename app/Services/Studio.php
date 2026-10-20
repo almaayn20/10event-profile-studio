@@ -129,15 +129,12 @@ class Studio
     {
         $images = $project->images->keyBy('id');
         $cells = [];
-        foreach ($project->layout ?? [] as $c) {
-            $img = $images->get($c['id']);
-            if (! $img) {
-                continue;
-            }
+        foreach ($project->windows() as $win) {
+            $img = $images->get($win['id']);
             $src = $print
                 ? 'file://'.self::abs($img->path)
                 : route('studio.images.show', ['image' => $img->id, 'size' => 'preview', 'v' => $img->updated_at?->timestamp]);
-            $cells[] = $c + ['src' => $src];
+            $cells[] = $win + ['src' => $src];
         }
 
         return view('portfolio.page', [
@@ -238,6 +235,33 @@ class Studio
             $version = $this->compose($current, [['op' => 'remove', 'page' => $page]], 'remove', $project);
             $this->carryPositions($current, $version, fn (int $p) => $p > $page ? $p - 1 : $p, $project->id);
             $project->forceFill(['profile_version_id' => null, 'profile_page' => null, 'profile_stale' => false])->save();
+
+            return $version;
+        });
+    }
+
+    /** Move the project's page, as it is in the profile, so that it becomes page $to; nothing is printed again. */
+    public function move(Project $project, int $to): Version
+    {
+        return $this->book(function () use ($project, $to) {
+            $current = $this->requireProfile();
+            if (! $project->inProfile()) {
+                throw new UserFacingException('portfolio_not_in_profile');
+            }
+            $from = $project->profile_page;
+            $to = max(1, min($to, $current->pages));
+            if ($to === $from) {
+                return $current;
+            }
+            $version = $this->compose($current, [['op' => 'move', 'page' => $from, 'to' => $to]], 'move', $project);
+
+            // the pages between the old place and the new one shift one place towards the old one
+            $this->carryPositions($current, $version, fn (int $p) => match (true) {
+                $from < $to && $p > $from && $p <= $to => $p - 1,
+                $from > $to && $p >= $to && $p < $from => $p + 1,
+                default => $p,
+            }, $project->id);
+            $project->forceFill(['profile_version_id' => $version->id, 'profile_page' => $to])->save();
 
             return $version;
         });

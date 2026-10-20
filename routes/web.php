@@ -31,9 +31,11 @@ Route::name('studio.')->group(function () {
             Route::post('/refresh', [ProjectController::class, 'refresh'])->name('refresh');
             Route::post('/unapprove', [ProjectController::class, 'unapprove'])->name('unapprove');
             Route::post('/link', [ProjectController::class, 'link'])->name('link');
+            Route::post('/move', [ProjectController::class, 'move'])->name('move');
         });
         Route::get('/images/{image}', [ImageController::class, 'show'])->name('images.show');
         Route::put('/images/{image}/priority', [ImageController::class, 'priority'])->name('images.priority');
+        Route::put('/images/{image}/crop', [ImageController::class, 'crop'])->name('images.crop');
         Route::delete('/images/{image}', [ImageController::class, 'destroy'])->name('images.destroy');
 
         Route::get('/profile', [ProfileController::class, 'index'])->name('profile');

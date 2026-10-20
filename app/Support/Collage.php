@@ -8,18 +8,17 @@ namespace App\Support;
  * The page is cut again and again into two (a cutting tree) until every picture has its own cell. A cell's area
  * follows the picture's weight: the first-priority picture gets the most room, then the second and third, then the
  * rest share what is left equally. Trees are improved step by step from a few random starts and the best is kept,
- * where "best" means:
- *  - every picture is cropped as little as possible (its cell has nearly its own proportions),
- *  - the priority pictures stay out from behind the white text card,
- *  - no ordinary picture disappears almost completely behind the card, and none is a sliver.
+ * where "best" is judged on what each cell leaves in view outside the white text card — a picture is drawn only
+ * in that part (PageGeometry::visibleBox), never behind the card:
+ *  - every picture is cropped as little as possible (its visible part has nearly its own proportions),
+ *  - as little of any picture as possible sits behind the card, the priority ones least of all,
+ *  - no cell is hidden whole, none is a sliver, and the larger pictures get the larger share of what shows.
  * The search is seeded, so the same pictures and the same seed always give the same page (preview = PDF);
  * "rearrange" simply asks for another seed.
  */
 final class Collage
 {
     private const WEIGHT = [1 => 6.0, 2 => 3.6, 3 => 2.4, 0 => 1.0];
-
-    private const GRID = 4.0;   // the hidden-area grid, in points
 
     private const RESTARTS = 6;
 
@@ -230,56 +229,48 @@ final class Collage
 
     private static function score(array $cells): float
     {
+        static $total = null;
+        $total ??= PageGeometry::visibleBox(0, 0, PageGeometry::W, PageGeometry::H)['visible'];
+        $weights = array_sum(array_map(fn ($c) => $c['item']['wt'], $cells));
         $s = 0.0;
         foreach ($cells as $c) {
-            [$x, $y, $w, $h] = $c['rect'];
             $it = $c['item'];
-            $crop = log(($w / $h) / $it['ar']);
+            $v = self::visible($c['rect']);
+            if ($v === null || $v['visible'] < 2500) {
+                $s += 60.0;                                   // a picture nobody would see
+                continue;
+            }
+            $crop = log(($v['w'] / $v['h']) / $it['ar']);
             $s += 2.0 * sqrt($it['wt']) * $crop * $crop;
 
-            $hidden = self::hiddenShare($x, $y, $w, $h);
-            if ($it['p'] > 0) {
-                $s += 6.0 * $it['wt'] * $hidden;              // a chosen picture must be seen
-            } elseif ($hidden > 0.6) {
-                $s += 12.0 * ($hidden - 0.6);                 // an ordinary one may tuck behind the card, but not vanish
-            }
-            $short = min($w, $h);
+            // what of the drawn picture the card still covers: an L-shaped view has a little, but a cell that runs
+            // under the card and peeps out on both sides would stretch one picture across it, mostly hidden
+            $s += ($it['p'] > 0 ? 5.0 * $it['wt'] : 6.0) * $v['hidden'] + 30.0 * max(0.0, $v['hidden'] - 0.2);
+
+            $short = min($v['w'], $v['h']);
             if ($short < 90) {
                 $s += (90 - $short) / 90 * 5.0;               // no slivers
             }
+            $share = log(($v['visible'] / $total) / ($it['wt'] / $weights));
+            $s += 1.2 * $share * $share;                      // the room in view follows the picture's weight
         }
 
         return $s;
     }
 
-    /** Share of a rectangle covered by the text card, from a summed-area table of the card. */
-    private static function hiddenShare(float $x, float $y, float $w, float $h): float
+    /** The visible part of a cell, coarse (4 pt rows) for scoring, remembered: the search sees the same cells often. */
+    private static function visible(array $rect): ?array
     {
-        static $sat = null;
-        $g = self::GRID;
-        $cols = (int) (PageGeometry::W / $g);
-        $rows = (int) (PageGeometry::H / $g);
-        if ($sat === null) {
-            $sat = array_fill(0, ($rows + 1) * ($cols + 1), 0);
-            for ($r = 1; $r <= $rows; $r++) {
-                $run = 0;
-                for ($c = 1; $c <= $cols; $c++) {
-                    $run += PageGeometry::insideBlob(($c - 0.5) * $g, ($r - 0.5) * $g) ? 1 : 0;
-                    $sat[$r * ($cols + 1) + $c] = $sat[($r - 1) * ($cols + 1) + $c] + $run;
-                }
+        static $memo = [];
+        $key = implode(':', array_map(fn ($v) => (int) round($v * 2), $rect));
+        if (! array_key_exists($key, $memo)) {
+            if (count($memo) > 50000) {
+                $memo = [];
             }
+            $memo[$key] = PageGeometry::visibleBox(...[...$rect, 4.0, 0.0]);
         }
-        $c0 = max(0, min($cols, (int) round($x / $g)));
-        $c1 = max(0, min($cols, (int) round(($x + $w) / $g)));
-        $r0 = max(0, min($rows, (int) round($y / $g)));
-        $r1 = max(0, min($rows, (int) round(($y + $h) / $g)));
-        $area = ($c1 - $c0) * ($r1 - $r0);
-        if ($area <= 0) {
-            return 0.0;
-        }
-        $at = fn ($r, $c) => $sat[$r * ($cols + 1) + $c];
 
-        return ($at($r1, $c1) - $at($r0, $c1) - $at($r1, $c0) + $at($r0, $c0)) / $area;
+        return $memo[$key];
     }
 
     /** Fisher–Yates on the seeded generator, so a seed always means the same order. */

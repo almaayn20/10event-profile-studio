@@ -53,6 +53,18 @@ portfolio.compose({"base": b, "out": c, "ops": [{"op": "replace", "page": 3, "pd
 assert abs(os.path.getsize(c) - os.path.getsize(a)) < 2048, (os.path.getsize(a), os.path.getsize(c))
 print("3. replace twice: same pages, and the file does not grow")
 
+m = os.path.join(OUT, "m.pdf")
+r = portfolio.compose({"base": a, "out": m, "ops": [{"op": "move", "page": 3, "to": 6}]}, OUT)
+assert r["pages"] == 6
+portfolio._thumb(m, os.path.join(OUT, "m6.jpg"), dpi=10, page_no=6)
+portfolio._thumb(m, os.path.join(OUT, "m3.jpg"), dpi=10, page_no=3)
+assert colour_of(os.path.join(OUT, "m6.jpg"), 6)[0] > 150 and colour_of(os.path.join(OUT, "m3.jpg"), 3)[0] < 150
+mm = os.path.join(OUT, "mm.pdf")
+portfolio.compose({"base": m, "out": mm, "ops": [{"op": "move", "page": 6, "to": 3}]}, OUT)
+assert [len(p.extract_text() or "") for p in PdfReader(mm).pages] == [len(p.extract_text() or "") for p in PdfReader(a).pages]
+assert abs(os.path.getsize(mm) - os.path.getsize(a)) < 2048
+print("3b. move: the same page goes where asked and back again")
+
 d = os.path.join(OUT, "d.pdf")
 r = portfolio.compose({"base": c, "out": d, "ops": [{"op": "remove", "page": 3}]}, OUT)
 assert r["pages"] == 5 and abs(os.path.getsize(d) - os.path.getsize(book)) < 4096

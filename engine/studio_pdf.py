@@ -83,7 +83,8 @@ def _thumb(pdf: str, out_jpg: str, dpi: int, page_no: int = 1) -> str | None:
 def compose(job: dict, work: str) -> dict:
     """Apply operations to a copy of the profile. Each op names pages by their number in the book as it stands when
     the op runs (1-based):  {"op": "insert", "at": 12, "pdf": path}  puts the page so it BECOMES page 12;
-    {"op": "replace", "page": 12, "pdf": path};  {"op": "remove", "page": 12}.
+    {"op": "replace", "page": 12, "pdf": path};  {"op": "remove", "page": 12};  {"op": "move", "page": 12, "to": 4} takes
+    page 12 out and puts it back so it BECOMES page 4 (the page itself, untouched).
     A page made at another size than the book's is scaled to the book's first page.
 
     The new file is built from the final list of pages (not by deleting from a copy), so a replaced or removed page
@@ -113,6 +114,12 @@ def compose(job: dict, work: str) -> dict:
                 pages[n - 1] = sheet(op["pdf"])
             else:
                 del pages[n - 1]
+        elif kind == "move":
+            n = int(op["page"])
+            if not 1 <= n <= len(pages):
+                raise EngineError("portfolio_page_out_of_range", f"page {n} of {len(pages)}")
+            moved = pages.pop(n - 1)
+            pages.insert(max(1, min(int(op["to"]), len(pages) + 1)) - 1, moved)
         else:
             raise EngineError("unknown_command", f"compose op {kind}")
 
