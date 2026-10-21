@@ -7,6 +7,7 @@
     $cells    list of {id, src, x, y, w, h, img: {x, y, w, h}} in points — each picture's window outside the card, and
               where the picture sits in it (Project::windows)
     $fonts    ['medium' => url, 'bold' => url]
+    $picturePage  true for a picture page: the pictures alone, no card, logo or texts
 --}}
 <!doctype html>
 <html lang="ar" dir="rtl">
@@ -62,6 +63,7 @@
         </div>
     @endforeach
 
+    @unless ($picturePage)
     <svg class="frame" id="frame" viewBox="0 0 960 540" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
         <path id="card" d="{{ \App\Support\PageGeometry::BLOB }}" fill="#FFFFFF" stroke="{{ \App\Support\PageGeometry::BROWN }}" stroke-width="2" stroke-miterlimit="10"/>
         @include('portfolio.logo-event')
@@ -74,7 +76,11 @@
         <div class="title-row"><div class="title" id="title">{{ $project['title'] }}</div></div>
     @endif
     @if (filled($project['description']))
-        <p class="desc" id="desc">{{ $project['description'] }}</p>
+        @php
+            // the description's room: down to the statistics; with none, down to the button, or to near the card's foot
+            $descBottom = count($project['stats']) ? 460.33 : (filled($project['details_url']) ? 476.0 : 522.0);
+        @endphp
+        <p class="desc" id="desc" data-grow="{{ count($project['stats']) ? 0 : 1 }}" style="max-height: {{ round($descBottom - 352.33, 2) }}pt;">{{ $project['description'] }}</p>
     @endif
 
     @foreach (array_slice($project['stats'], 0, 3) as $i => $s)
@@ -92,6 +98,7 @@
     @if (filled($project['details_url']))
         <a class="more" href="{{ $project['details_url'] }}">{{ $project['details_label'] ?: 'لتفاصيل أكثر' }}</a>
     @endif
+    @endunless
 </div>
 <script>
     // the client and the title stay inside the card: where the card is narrower than the line, the line is set smaller
@@ -147,18 +154,36 @@
         if (document.fonts && document.fonts.ready) document.fonts.ready.then(go); else go();
     })();
 
-    // a description longer than the card's six lines steps its type down (never below 9.5 pt) instead of being cut off
+    // a description longer than its room steps its type down (never below 9.5 pt) instead of being cut off; with no
+    // statistics under it, the room reaches further down and the description grows into it: larger type first (up to
+    // 14.5 pt), then wider line spacing, until it fills the room to the bottom
     (function () {
         var d = document.getElementById('desc');
         if (!d) return;
-        var size = 11.46;
+        var BASE = 11.46, RATIO = 18 / 11.46, PX = 4 / 3;
+        var size = BASE;
+        var set = function (s, lh) { d.style.fontSize = s + 'pt'; d.style.lineHeight = (lh || s * RATIO).toFixed(2) + 'pt'; };
         var fit = function () { return d.scrollHeight <= d.clientHeight + 1; };
         var go = function () {
+            if (d.dataset.grow === '1') {
+                while (size < 14.5) {
+                    set(size + 0.25);
+                    if (!fit()) { set(size); break; }
+                    size = Math.round((size + 0.25) * 100) / 100;
+                }
+                if (fit()) {
+                    // as many lines as now, spread over the whole room (but never more than twice the type apart)
+                    var room = parseFloat(d.style.maxHeight);
+                    var lines = Math.max(1, Math.round(d.scrollHeight / (size * RATIO * PX)));
+                    set(size, Math.max(size * RATIO, Math.min(size * 2, room / lines - 0.05)));
+                    if (!fit()) set(size);
+                }
+            }
             while (!fit() && size > 9.5) {
                 size = Math.round((size - 0.25) * 100) / 100;
-                d.style.fontSize = size + 'pt';
-                d.style.lineHeight = (size * 18 / 11.46).toFixed(2) + 'pt';
+                set(size);
             }
+            document.documentElement.dataset.descScale = (size / BASE).toFixed(2);
             document.documentElement.dataset.overflow = fit() ? '0' : '1';
             document.documentElement.dataset.fitted = '1';
         };

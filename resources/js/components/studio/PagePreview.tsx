@@ -58,8 +58,7 @@ export function PagePreview({ url, data, version, onFit, onPick, onHeadFit }: {
             if ((root.dataset.fitted !== '1' || root.dataset.titled !== '1') && tries++ < 40) return window.setTimeout(read, 100);
             onHeadFit?.({ client: Number(root.dataset.clientScale ?? 1) || 1, title: Number(root.dataset.titleScale ?? 1) || 1 });
             if (!onFit) return;
-            const desc = doc.getElementById('desc');
-            onFit(root.dataset.overflow === '1' ? 'cut' : desc?.style.fontSize ? 'shrunk' : 'ok');
+            onFit(root.dataset.overflow === '1' ? 'cut' : Number(root.dataset.descScale ?? 1) < 1 ? 'shrunk' : 'ok');
         };
         read();
     };

@@ -109,8 +109,10 @@ export default function StudioEdit({ project, profile, suggestedAt, defaults, ca
 
             <div className="studio-editor">
                 <div className="studio-editor-form">
+                    {project.kind === 'image' && <Banner status="info" title={t('studio.edit.picture_page')} collapsible={false} />}
                     <ImagesPanel projectId={project.id} images={images} onCrop={(img) => windows.some((w) => w.id === img.id) && setCropping(img.id)} />
 
+                    {project.kind !== 'image' && <>
                     <Card padding={5}>
                         <div className="studio-stack" style={{ gap: 14 }}>
                             <h2 className="studio-h2">{t('studio.edit.texts')}</h2>
@@ -152,6 +154,7 @@ export default function StudioEdit({ project, profile, suggestedAt, defaults, ca
                             ))}
                         </div>
                     </Card>
+                    </>}
 
                     <Card padding={5}>
                         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>

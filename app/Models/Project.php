@@ -17,7 +17,7 @@ class Project extends Model
     protected $table = 'projects';
 
     protected $fillable = [
-        'client', 'title', 'description', 'details_url', 'details_label', 'stats', 'status', 'layout_seed', 'layout',
+        'kind', 'client', 'title', 'description', 'details_url', 'details_label', 'stats', 'status', 'layout_seed', 'layout',
         'page_path', 'thumb_path', 'rendered_at', 'profile_version_id', 'profile_page', 'profile_stale', 'approved_at',
     ];
 
@@ -52,6 +52,12 @@ class Project extends Model
     public function dir(): string
     {
         return 'projects/'.$this->public_id;
+    }
+
+    /** A picture page: its picture is the whole page, with no card and no texts (the profile's opening and closing pages). */
+    public function isPicturePage(): bool
+    {
+        return $this->kind === 'image';
     }
 
     /** True while the page is a page of the profile as it stands now. */
@@ -135,6 +141,7 @@ class Project extends Model
     {
         $data = [
             'id' => $this->public_id,
+            'kind' => $this->kind ?? 'project',
             'client' => $this->client,
             'title' => $this->title,
             'status' => $this->status,

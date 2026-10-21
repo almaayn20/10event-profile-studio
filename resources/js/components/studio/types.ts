@@ -9,6 +9,7 @@ export interface StudioWindow { id: number; x: number; y: number; w: number; h: 
 
 export interface StudioProject {
     id: string;
+    kind: 'project' | 'image';
     client: string;
     title: string;
     status: 'draft' | 'approved';

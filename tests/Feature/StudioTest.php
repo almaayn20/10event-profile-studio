@@ -280,6 +280,21 @@ class StudioTest extends TestCase
         $this->post(route('studio.projects.preview', $project), ['details_url' => 'javascript:alert(1)'])->assertSessionHasErrors('details_url');
     }
 
+    public function test_a_picture_page_is_its_picture_alone(): void
+    {
+        $this->post(route('studio.login.attempt'), ['password' => 'first-pass-1']);
+        $project = $this->projectWithPictures(1);
+        $project->forceFill(['kind' => 'image', 'title' => 'الغلاف'])->save();
+
+        $html = $this->post(route('studio.projects.preview', $project), ['client' => 'لا يظهر', 'title' => 'الغلاف', 'stats' => [['value' => '1', 'label' => 'x']]])->getContent();
+        $this->assertSame(1, substr_count($html, 'class="cell"'));
+        $this->assertStringContainsString('left: 0pt; top: 0pt; width: 960pt; height: 540pt;', $html);
+        foreach (['id="card"', 'class="stat"', 'لا يظهر', 'class="title"'] as $absent) {
+            $this->assertStringNotContainsString($absent, $html);
+        }
+        $this->get(route('studio.projects.edit', $project))->assertInertia(fn (Assert $p) => $p->where('project.kind', 'image'));
+    }
+
     public function test_approving_places_the_page_and_every_other_project_keeps_its_place(): void
     {
         $this->post(route('studio.login.attempt'), ['password' => 'first-pass-1']);

@@ -138,6 +138,7 @@ class Studio
         }
 
         return view('portfolio.page', [
+            'picturePage' => $project->isPicturePage(),
             'project' => $override ?? $project->content(),
             'cells' => $cells,
             'fonts' => [
