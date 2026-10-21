@@ -1,7 +1,8 @@
 import { Button } from '@astryxdesign/core/Button';
 import { Card } from '@astryxdesign/core/Card';
 import { SegmentedControl, SegmentedControlItem } from '@astryxdesign/core/SegmentedControl';
-import { Link, router } from '@inertiajs/react';
+import { Switch } from '@astryxdesign/core/Switch';
+import { Link, router, usePage } from '@inertiajs/react';
 import { Download, FileText, ImageIcon, Plus, Upload } from 'lucide-react';
 import { useState } from 'react';
 import StudioLayout from '@/components/layout/StudioLayout';
@@ -9,12 +10,20 @@ import { PageHead } from '@/components/ui/bits';
 import { StatusBadges } from '@/components/studio/StatusBadges';
 import { formatBytes, formatDate, type StudioProject, type StudioVersion } from '@/components/studio/types';
 import { useT } from '@/lib/i18n';
+import type { SharedProps } from '@/lib/types';
 
 export default function StudioIndex({ projects, profile }: { projects: StudioProject[]; profile: StudioVersion | null }) {
     const { t, locale, num } = useT();
     const [filter, setFilter] = useState<'all' | 'draft' | 'approved'>('all');
     const [creating, setCreating] = useState(false);
     const shown = projects.filter((p) => filter === 'all' || p.status === filter);
+    const statsShown = usePage<SharedProps>().props.app.statsShown;
+    const [savingStats, setSavingStats] = useState(false);
+    // one switch for every project; the pages already in the profile that change are marked for updating
+    const setStats = (on: boolean) => {
+        if (!window.confirm(t(on ? 'studio.index.stats_on_confirm' : 'studio.index.stats_off_confirm'))) return;
+        router.put(route('studio.settings.stats'), { on }, { preserveScroll: true, onStart: () => setSavingStats(true), onFinish: () => setSavingStats(false) });
+    };
 
     return (
         <StudioLayout title={t('studio.index.title')}>
@@ -42,12 +51,16 @@ export default function StudioIndex({ projects, profile }: { projects: StudioPro
                 </div>
             </Card>
 
-            <div style={{ display: 'flex', justifyContent: 'flex-start' }}>
+            <div style={{ display: 'flex', justifyContent: 'flex-start', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
                 <SegmentedControl label={t('studio.index.title')} value={filter} onChange={(v) => setFilter(v as any)} size="sm">
                     <SegmentedControlItem value="all" label={`${t('studio.index.filter_all')} (${num(projects.length)})`} />
                     <SegmentedControlItem value="draft" label={`${t('studio.index.filter_draft')} (${num(projects.filter((p) => p.status === 'draft').length)})`} />
                     <SegmentedControlItem value="approved" label={`${t('studio.index.filter_approved')} (${num(projects.filter((p) => p.status === 'approved').length)})`} />
                 </SegmentedControl>
+                <div style={{ marginInlineStart: 'auto' }}>
+                    <Switch label={t('studio.index.stats_switch')} description={statsShown ? t('studio.index.stats_switch_on') : t('studio.index.stats_switch_off')}
+                        value={statsShown} isLoading={savingStats} onChange={(on) => setStats(on)} size="sm" />
+                </div>
             </div>
 
             {shown.length === 0 ? (

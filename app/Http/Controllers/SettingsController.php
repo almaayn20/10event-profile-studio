@@ -2,7 +2,9 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Project;
 use App\Services\Fonts;
+use App\Support\Settings;
 use App\Support\StudioAccess;
 use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
@@ -29,6 +31,24 @@ class SettingsController extends Controller
         StudioAccess::grant($request);
 
         return back()->with('success', 'ui.studio.password_saved');
+    }
+
+    /**
+     * Statistics on or off for every project. A page already in the profile that has statistics prints differently
+     * now, so it is marked for updating.
+     */
+    public function stats(Request $request)
+    {
+        $on = $request->validate(['on' => ['required', 'boolean']])['on'];
+        if ((bool) $on === Settings::statsShown()) {
+            return back();
+        }
+        Settings::showStats((bool) $on);
+        Project::where('kind', '!=', 'image')->whereNotNull('profile_page')->get()
+            ->filter(fn (Project $p) => $p->inProfile() && count($p->content()['stats']))
+            ->each(fn (Project $p) => $p->forceFill(['profile_stale' => true])->save());
+
+        return back()->with('success', $on ? 'ui.studio.stats_shown' : 'ui.studio.stats_hidden');
     }
 
     public function font(Request $request, string $weight)

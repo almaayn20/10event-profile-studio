@@ -5,9 +5,9 @@ import { SegmentedControl, SegmentedControlItem } from '@astryxdesign/core/Segme
 import { NumberInput } from '@astryxdesign/core/NumberInput';
 import { TextArea } from '@astryxdesign/core/TextArea';
 import { TextInput } from '@astryxdesign/core/TextInput';
-import { Link, router, useForm } from '@inertiajs/react';
-import { AArrowDown, AArrowUp, ArrowLeft, ArrowRight, ArrowUpDown, BookPlus, Check, Download, Plus, RefreshCw, RotateCcw, Save, Trash2, Undo2, WrapText, X } from 'lucide-react';
-import { useState } from 'react';
+import { Link, router, useForm, usePage } from '@inertiajs/react';
+import { AArrowDown, AArrowUp, ArrowLeft, ArrowRight, ArrowUpDown, BookPlus, Check, Download, Plus, Redo2, RefreshCw, RotateCcw, Save, Trash2, Undo2, WrapText, X } from 'lucide-react';
+import { useRef, useState } from 'react';
 import StudioLayout from '@/components/layout/StudioLayout';
 import { CropDialog } from '@/components/studio/CropDialog';
 import { ImagesPanel } from '@/components/studio/ImagesPanel';
@@ -17,6 +17,7 @@ import { StatusBadges } from '@/components/studio/StatusBadges';
 import type { StudioProject, StudioStat, StudioVersion } from '@/components/studio/types';
 import { ScrollDialog } from '@/components/ui/ScrollDialog';
 import { useT } from '@/lib/i18n';
+import type { SharedProps } from '@/lib/types';
 
 interface Props {
     project: StudioProject;
@@ -40,12 +41,54 @@ export default function StudioEdit({ project, profile, suggestedAt, defaults, ca
     });
     const d = form.data;
     const [fit, setFit] = useState<Fit>('ok');
+    const statsShown = usePage<SharedProps>().props.app.statsShown;
     const [head, setHead] = useState<HeadFit>({ client: 1, title: 1, desc: 11.46, stats: 1 });
     // the description's type: chosen by hand in half points, starting from the size it prints at now
     const descSize = d.desc_size ?? head.desc;
-    const stepSize = (by: number) => form.setData('desc_size', Math.max(8, Math.min(18, Math.round((descSize + by) * 2) / 2)));
+    // The texts' own undo history (Ctrl+Z / Ctrl+Shift+Z or Ctrl+Y, and the buttons): every change to the texts, the
+    // description's size and alignment and the merged lines is a step; typing on in the same field within a second
+    // is one step, as a text editor would have it
+    type TextKey = 'client' | 'title' | 'description' | 'details_url' | 'details_label' | 'desc_size' | 'desc_align';
+    const TEXT_KEYS: TextKey[] = ['client', 'title', 'description', 'details_url', 'details_label', 'desc_size', 'desc_align'];
+    type Snap = Pick<typeof d, TextKey>;
+    const history = useRef<{ past: Snap[]; future: Snap[]; last: { key: TextKey; at: number } | null }>({ past: [], future: [], last: null });
+    const [, redraw] = useState(0);
+    const snap = (): Snap => Object.fromEntries(TEXT_KEYS.map((k) => [k, form.data[k]])) as Snap;
+    const setText = <K extends TextKey>(key: K, value: (typeof d)[K], typing = false) => {
+        if (form.data[key] === value) return;
+        const h = history.current;
+        const now = Date.now();
+        if (!(typing && h.last?.key === key && now - h.last.at < 1000)) {
+            h.past.push(snap());
+            if (h.past.length > 200) h.past.shift();
+        }
+        h.future = [];
+        h.last = typing ? { key, at: now } : null;
+        form.setData((data) => ({ ...data, [key]: value }));
+        redraw((n) => n + 1);
+    };
+    const travel = (from: 'past' | 'future') => {
+        const h = history.current;
+        const to = from === 'past' ? 'future' : 'past';
+        const snapshot = h[from].pop();
+        if (!snapshot) return;
+        h[to].push(snap());
+        h.last = null;
+        form.setData((data) => ({ ...data, ...snapshot }));
+        redraw((n) => n + 1);
+    };
+    const undo = () => travel('past');
+    const redo = () => travel('future');
+    // by the key's place on the keyboard, so it works with the Arabic layout too
+    const onTextKeys = (e: React.KeyboardEvent) => {
+        if (!(e.ctrlKey || e.metaKey) || e.altKey) return;
+        if (e.code === 'KeyZ' && !e.shiftKey) { e.preventDefault(); undo(); }
+        else if ((e.code === 'KeyZ' && e.shiftKey) || e.code === 'KeyY') { e.preventDefault(); redo(); }
+    };
+
+    const stepSize = (by: number) => setText('desc_size', Math.max(8, Math.min(18, Math.round((descSize + by) * 2) / 2)));
     // every line break goes: the text runs on and breaks only where the line is full
-    const mergeLines = () => form.setData('description', d.description.replace(/[ \t]*\n+[ \t]*/g, ' ').replace(/ {2,}/g, ' ').trim());
+    const mergeLines = () => setText('description', d.description.replace(/[ \t]*\n+[ \t]*/g, ' ').replace(/ {2,}/g, ' ').trim());
     // set noticeably smaller to fit the card: say so, by how much
     const smaller = (k: number) => (k < 0.8 ? { type: 'warning' as const, message: t('studio.edit.head_shrunk', { pct: Math.round(k * 100) }) } : undefined);
     const [dialog, setDialog] = useState<null | 'place' | 'link' | 'move'>(null);
@@ -122,14 +165,14 @@ export default function StudioEdit({ project, profile, suggestedAt, defaults, ca
 
                     {project.kind !== 'image' && <>
                     <Card padding={5}>
-                        <div className="studio-stack" style={{ gap: 14 }}>
+                        <div className="studio-stack" style={{ gap: 14 }} onKeyDownCapture={onTextKeys}>
                             <h2 className="studio-h2">{t('studio.edit.texts')}</h2>
                             <div className="grid gap-[12px] sm:grid-cols-2">
-                                <TextInput width="100%" label={t('studio.edit.client')} value={d.client} onChange={(v) => form.setData('client', v)} status={err('client') ?? (d.client ? smaller(head.client) : undefined)} />
-                                <TextInput width="100%" label={t('studio.edit.title')} description={t('studio.edit.title_hint')} value={d.title} onChange={(v) => form.setData('title', v)} status={err('title') ?? (d.title ? smaller(head.title) : undefined)} />
+                                <TextInput width="100%" label={t('studio.edit.client')} value={d.client} onChange={(v) => setText('client', v, true)} status={err('client') ?? (d.client ? smaller(head.client) : undefined)} />
+                                <TextInput width="100%" label={t('studio.edit.title')} description={t('studio.edit.title_hint')} value={d.title} onChange={(v) => setText('title', v, true)} status={err('title') ?? (d.title ? smaller(head.title) : undefined)} />
                             </div>
                             <TextArea width="100%" label={t('studio.edit.description')} description={t('studio.edit.description_hint')} rows={7} maxLength={2000}
-                                value={d.description} onChange={(v) => form.setData('description', v)}
+                                value={d.description} onChange={(v) => setText('description', v, true)}
                                 status={err('description') ?? err('desc_size') ?? (fit === 'cut' ? { type: 'error', message: t(d.desc_size ? 'studio.edit.desc_size_cut' : 'studio.edit.description_cut') } : fit === 'shrunk' ? { type: 'warning', message: t('studio.edit.description_long') } : undefined)} />
                             <div className="studio-desc-tools" role="toolbar" aria-label={t('studio.edit.desc_tools')}>
                                 <div className="studio-desc-size">
@@ -141,22 +184,28 @@ export default function StudioEdit({ project, profile, suggestedAt, defaults, ca
                                     </span>
                                     <Button size="sm" variant="secondary" icon={<AArrowUp size={16} />} label={t('studio.edit.desc_bigger')} isIconOnly tooltip={t('studio.edit.desc_bigger')}
                                         isDisabled={descSize >= 18} onClick={() => stepSize(0.5)} />
-                                    {d.desc_size !== null && <Button size="sm" variant="ghost" label={t('studio.edit.desc_auto_back')} onClick={() => form.setData('desc_size', null)} />}
+                                    {d.desc_size !== null && <Button size="sm" variant="ghost" label={t('studio.edit.desc_auto_back')} onClick={() => setText('desc_size', null)} />}
                                 </div>
                                 <SegmentedControl size="sm" label={t('studio.edit.desc_align')} value={d.desc_align ?? 'profile'}
-                                    onChange={(v) => form.setData('desc_align', v === 'profile' ? null : (v as 'justify' | 'center'))}>
+                                    onChange={(v) => setText('desc_align', v === 'profile' ? null : (v as 'justify' | 'center'))}>
                                     <SegmentedControlItem value="justify" label={t('studio.edit.align_justify')} />
                                     <SegmentedControlItem value="profile" label={t('studio.edit.align_profile')} />
                                     <SegmentedControlItem value="center" label={t('studio.edit.align_center')} />
                                 </SegmentedControl>
                                 <Button size="sm" variant="ghost" icon={<WrapText size={15} />} label={t('studio.edit.merge_lines')} tooltip={t('studio.edit.merge_lines_hint')}
                                     isDisabled={!/\n/.test(d.description)} onClick={mergeLines} />
+                                <div style={{ display: 'inline-flex', gap: 4, marginInlineStart: 'auto' }}>
+                                    <Button size="sm" variant="secondary" icon={<Undo2 size={15} />} label={t('studio.edit.undo')} isIconOnly tooltip={t('studio.edit.undo_hint')}
+                                        isDisabled={!history.current.past.length} onClick={undo} />
+                                    <Button size="sm" variant="secondary" icon={<Redo2 size={15} />} label={t('studio.edit.redo')} isIconOnly tooltip={t('studio.edit.redo_hint')}
+                                        isDisabled={!history.current.future.length} onClick={redo} />
+                                </div>
                             </div>
                             <div className="grid gap-[12px] sm:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
                                 <TextInput width="100%" label={t('studio.edit.details_url')} description={t('studio.edit.details_url_hint')} value={d.details_url} dir="ltr"
-                                    placeholder="https://" onChange={(v) => form.setData('details_url', v)} status={err('details_url')} isOptional />
+                                    placeholder="https://" onChange={(v) => setText('details_url', v, true)} status={err('details_url')} isOptional />
                                 <TextInput width="100%" label={t('studio.edit.details_label')} value={d.details_label} placeholder={defaults.details_label}
-                                    onChange={(v) => form.setData('details_label', v)} status={err('details_label')} isOptional />
+                                    onChange={(v) => setText('details_label', v, true)} status={err('details_label')} isOptional />
                             </div>
                         </div>
                     </Card>
@@ -171,7 +220,8 @@ export default function StudioEdit({ project, profile, suggestedAt, defaults, ca
                                 </div>
                             </div>
                             <p className="muted" style={{ margin: 0 }}>{t('studio.edit.stats_hint')}</p>
-                            {d.stats.length > 0 && head.stats < 0.85 && <Banner status="warning" title={t('studio.edit.stats_shrunk', { pct: Math.round(head.stats * 100) })} collapsible={false} />}
+                            {!statsShown && <Banner status="info" title={t('studio.edit.stats_hidden_all')} collapsible={false} />}
+                            {statsShown && d.stats.length > 0 && head.stats < 0.85 && <Banner status="warning" title={t('studio.edit.stats_shrunk', { pct: Math.round(head.stats * 100) })} collapsible={false} />}
                             {d.stats.length === 0 && <p className="muted tinted" style={{ margin: 0 }}>{t('studio.edit.stats_empty')}</p>}
                             {d.stats.map((s, i) => (
                                 <div key={i} className="studio-stat-row">

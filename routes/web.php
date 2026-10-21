@@ -46,6 +46,7 @@ Route::name('studio.')->group(function () {
 
         Route::get('/settings', [SettingsController::class, 'edit'])->name('settings');
         Route::put('/settings/password', [SettingsController::class, 'password'])->name('settings.password');
+        Route::put('/settings/stats', [SettingsController::class, 'stats'])->name('settings.stats');
         Route::post('/settings/fonts/{weight}', [SettingsController::class, 'font'])->whereIn('weight', ['medium', 'bold'])->name('settings.font');
         Route::get('/fonts/{weight}', [SettingsController::class, 'show'])->whereIn('weight', ['medium', 'bold'])->name('fonts');
     });

@@ -304,6 +304,28 @@ class StudioTest extends TestCase
         $this->assertSame([null, null], [$project->fresh()->desc_size, $project->fresh()->desc_align]);
     }
 
+    public function test_one_switch_hides_the_statistics_of_every_project_and_brings_them_back(): void
+    {
+        $this->post(route('studio.login.attempt'), ['password' => 'first-pass-1']);
+        $this->profile();
+        $placed = $this->projectWithPictures(1);
+        $this->post(route('studio.projects.approve', $placed), ['at' => 3]);
+        $draft = $this->projectWithPictures(1);
+        $page = fn (Project $p) => $this->post(route('studio.projects.preview', $p), ['description' => 'وصف', 'stats' => [['value' => '100+', 'label' => 'معلن']]])->getContent();
+        $this->assertSame(1, substr_count($page($draft), 'class="stat"'));
+
+        $this->put(route('studio.settings.stats'), ['on' => false])->assertSessionHas('success', 'ui.studio.stats_hidden');
+        $this->assertSame(0, substr_count($page($draft), 'class="stat"'));
+        $this->assertStringContainsString('data-grow="1"', $page($draft));           // the description takes their room
+        $this->assertSame(PageGeometry::DEFAULT_STATS, $draft->fresh()->stats);         // each project keeps its own
+        $this->assertTrue($placed->fresh()->profile_stale, 'the page in the profile prints differently now');
+        $this->assertFalse((bool) $draft->fresh()->profile_stale);
+        $this->get(route('studio.index'))->assertInertia(fn (Assert $p) => $p->where('app.statsShown', false));
+
+        $this->put(route('studio.settings.stats'), ['on' => true])->assertSessionHas('success', 'ui.studio.stats_shown');
+        $this->assertSame(1, substr_count($page($draft), 'class="stat"'));
+    }
+
     public function test_a_picture_page_is_its_picture_alone(): void
     {
         $this->post(route('studio.login.attempt'), ['password' => 'first-pass-1']);

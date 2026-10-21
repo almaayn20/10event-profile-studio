@@ -21,6 +21,7 @@ class HandleInertiaRequests extends Middleware
                 'locale' => $locale,
                 'dir' => $locale === 'ar' ? 'rtl' : 'ltr',
                 'uploadMaxMb' => (int) config('studio.image_max_mb'),
+                'statsShown' => \App\Support\Settings::statsShown(),
             ],
             // the dictionary is sent once and kept by the browser; a deploy with new wording sends it again
             't' => Inertia::once(fn () => ['studio' => __('ui.studio'), 'common' => __('ui.common'), 'errors' => __('errors')])

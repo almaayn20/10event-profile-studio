@@ -137,9 +137,14 @@ class Studio
             $cells[] = $win + ['src' => $src];
         }
 
+        $content = $override ?? $project->content();
+        if (! \App\Support\Settings::statsShown()) {
+            $content['stats'] = [];          // switched off for every project: the page is drawn as if it had none
+        }
+
         return view('portfolio.page', [
             'picturePage' => $project->isPicturePage(),
-            'project' => $override ?? $project->content(),
+            'project' => $content,
             'cells' => $cells,
             'fonts' => [
                 'medium' => $print ? 'file://'.Fonts::path('medium') : route('studio.fonts', ['weight' => 'medium', 'v' => Fonts::version()]),
