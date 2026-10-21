@@ -17,14 +17,14 @@ class Project extends Model
     protected $table = 'projects';
 
     protected $fillable = [
-        'kind', 'client', 'title', 'description', 'details_url', 'details_label', 'stats', 'status', 'layout_seed', 'layout',
+        'kind', 'client', 'title', 'description', 'desc_size', 'desc_align', 'details_url', 'details_label', 'stats', 'status', 'layout_seed', 'layout',
         'page_path', 'thumb_path', 'rendered_at', 'profile_version_id', 'profile_page', 'profile_stale', 'approved_at',
     ];
 
     protected function casts(): array
     {
         return [
-            'stats' => 'array', 'layout' => 'array', 'profile_stale' => 'boolean',
+            'stats' => 'array', 'layout' => 'array', 'profile_stale' => 'boolean', 'desc_size' => 'float',
             'rendered_at' => 'datetime', 'approved_at' => 'datetime',
         ];
     }
@@ -115,6 +115,8 @@ class Project extends Model
             'client' => (string) $this->client,
             'title' => (string) $this->title,
             'description' => trim((string) $this->description),
+            'desc_size' => $this->desc_size,
+            'desc_align' => $this->desc_align,
             'details_url' => $this->details_url,
             'details_label' => $this->details_label,
             'stats' => array_values(array_filter($this->stats ?? [], fn ($s) => filled($s['value'] ?? null) || filled($s['label'] ?? null))),
@@ -156,6 +158,8 @@ class Project extends Model
         if ($full) {
             $data += [
                 'description' => $this->description ?? '',
+                'desc_size' => $this->desc_size,
+                'desc_align' => $this->desc_align,
                 'details_url' => $this->details_url ?? '',
                 'details_label' => $this->details_label ?? '',
                 'stats' => $this->stats ?? [],

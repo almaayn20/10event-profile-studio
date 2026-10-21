@@ -201,6 +201,8 @@ class ProjectController extends Controller
             'client' => ['nullable', 'string', 'max:160'],
             'title' => ['nullable', 'string', 'max:160'],
             'description' => ['nullable', 'string', 'max:2000'],
+            'desc_size' => ['nullable', 'numeric', 'between:8,18'],
+            'desc_align' => ['nullable', 'in:justify,center'],
             'details_url' => ['nullable', 'url:http,https', 'max:600'],
             'details_label' => ['nullable', 'string', 'max:60'],
             'stats' => ['nullable', 'array', 'max:3'],

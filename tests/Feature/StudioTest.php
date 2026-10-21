@@ -280,6 +280,30 @@ class StudioTest extends TestCase
         $this->post(route('studio.projects.preview', $project), ['details_url' => 'javascript:alert(1)'])->assertSessionHasErrors('details_url');
     }
 
+    public function test_the_description_takes_a_size_and_an_alignment_chosen_by_hand(): void
+    {
+        $this->post(route('studio.login.attempt'), ['password' => 'first-pass-1']);
+        $project = $this->projectWithPictures(1);
+        $page = fn (array $data) => $this->post(route('studio.projects.preview', $project), ['description' => 'نص', 'stats' => []] + $data)->getContent();
+
+        $html = $page([]);
+        $this->assertStringNotContainsString('data-size=', $html);                 // fitted automatically
+        $this->assertStringContainsString('data-align="profile"', $html);        // the profile's own alignment
+        $html = $page(['desc_size' => 13.5, 'desc_align' => 'justify']);
+        $this->assertStringContainsString('data-size="13.5"', $html);
+        $this->assertStringContainsString('data-align="justify"', $html);        // justified by the page's script, between words only
+        $this->assertStringNotContainsString('text-align: justify', $html);       // never by Chrome: it opens gaps inside SF Mada words
+        $html = $page(['desc_align' => 'center', 'desc_size' => 12]);
+        $this->assertStringContainsString('data-align="center"', $html);
+        $this->assertStringContainsString('data-size="12"', $html);
+
+        $this->post(route('studio.projects.preview', $project), ['desc_size' => 30, 'desc_align' => 'left'])->assertSessionHasErrors(['desc_size', 'desc_align']);
+        $this->put(route('studio.projects.update', $project), ['description' => 'نص', 'desc_size' => 12, 'desc_align' => 'center', 'stats' => []])->assertSessionHasNoErrors();
+        $this->assertSame([12.0, 'center'], [$project->fresh()->desc_size, $project->fresh()->desc_align]);
+        $this->put(route('studio.projects.update', $project), ['description' => 'نص', 'desc_size' => null, 'desc_align' => null, 'stats' => []]);
+        $this->assertSame([null, null], [$project->fresh()->desc_size, $project->fresh()->desc_align]);
+    }
+
     public function test_a_picture_page_is_its_picture_alone(): void
     {
         $this->post(route('studio.login.attempt'), ['password' => 'first-pass-1']);

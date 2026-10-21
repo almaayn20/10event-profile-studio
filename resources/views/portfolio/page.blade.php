@@ -41,13 +41,16 @@
     .desc {
         margin: 0;
         position: absolute; left: 301.8pt; width: 350.1pt; top: 352.33pt; max-height: 108pt;
-        font-size: 11.46pt; line-height: 18pt; text-align: justify; text-align-last: center; white-space: pre-line; overflow: hidden;
+        font-size: 11.46pt; line-height: 18pt; text-align: right; white-space: pre-line; overflow: hidden;
     }
-    .stat { position: absolute; width: 70pt; text-align: right; font-weight: 700; }
-    .stat .v { position: absolute; right: 0; line-height: 22pt; white-space: nowrap; }
-    .stat .v.num { top: 0; font-size: 17.11pt; }
-    .stat .v.word { top: 0.84pt; font-size: 13.78pt; }
-    .stat .l { position: absolute; right: 0; top: 20.48pt; font-size: 14.26pt; line-height: 20pt; white-space: nowrap; }
+    /* the statistics: a row from the card's right column inwards, each as wide as its own words, evenly apart; when
+       they outgrow the room the gaps close first, then the type steps down (--s) — see the script */
+    .stats { position: absolute; right: 314pt; top: 473.22pt; display: flex; gap: 34pt; align-items: flex-start; --s: 1; }
+    .stat { display: flex; flex-direction: column; align-items: flex-start; text-align: right; font-weight: 700; white-space: nowrap; }
+    .stat .v { line-height: calc(22pt * var(--s)); }
+    .stat .v.num { font-size: calc(17.11pt * var(--s)); }
+    .stat .v.word { font-size: calc(13.78pt * var(--s)); padding-top: calc(0.84pt * var(--s)); margin-bottom: calc(-0.84pt * var(--s)); }
+    .stat .l { margin-top: calc(-1.52pt * var(--s)); font-size: calc(14.26pt * var(--s)); line-height: calc(20pt * var(--s)); }
     .more {
         position: absolute; left: 308.23pt; top: 484.47pt; min-width: 51.24pt; height: 19.85pt; padding: 0 3pt; border-radius: 1.56pt;
         background: {{ \App\Support\PageGeometry::BROWN }}; color: #fff; text-decoration: none;
@@ -80,11 +83,21 @@
             // the description's room: down to the statistics; with none, down to the button, or to near the card's foot
             $descBottom = count($project['stats']) ? 460.33 : (filled($project['details_url']) ? 476.0 : 522.0);
         @endphp
-        <p class="desc" id="desc" data-grow="{{ count($project['stats']) ? 0 : 1 }}" style="max-height: {{ round($descBottom - 352.33, 2) }}pt;">{{ $project['description'] }}</p>
+        @php
+            // the profile's own: justified with the last line centred; «justify»: the last line from the right; «center».
+            // Justifying is done by the script below, between words only (Chrome's own justification opens gaps inside
+            // words in SF Mada); the CSS only centres
+            $alignMode = in_array($project['desc_align'] ?? null, ['justify', 'center'], true) ? $project['desc_align'] : 'profile';
+            $align = $alignMode === 'center' ? 'text-align: center;' : '';
+        @endphp
+        <p class="desc" id="desc" data-align="{{ $alignMode }}" data-grow="{{ count($project['stats']) ? 0 : 1 }}" @if (filled($project['desc_size'] ?? null)) data-size="{{ (float) $project['desc_size'] }}" @endif
+           style="max-height: {{ round($descBottom - 352.33, 2) }}pt; {{ $align }}">{{ $project['description'] }}</p>
     @endif
 
+    @if (count($project['stats']))
+    <div class="stats" id="stats">
     @foreach (array_slice($project['stats'], 0, 3) as $i => $s)
-        <div class="stat" style="left: {{ \App\Support\PageGeometry::STAT_COLUMNS[$i] - 70 }}pt; top: 473.22pt;">
+        <div class="stat">
             {{-- a bare number is set large and read left to right («100+»); a number with a word («4 مناطق») smaller, as in the profile --}}
             @if (preg_match('/\p{Arabic}/u', $s['value']))
                 <span class="v word">{{ $s['value'] }}</span>
@@ -94,6 +107,8 @@
             <span class="l">{{ $s['label'] }}</span>
         </div>
     @endforeach
+    </div>
+    @endif
 
     @if (filled($project['details_url']))
         <a class="more" href="{{ $project['details_url'] }}">{{ $project['details_label'] ?: 'لتفاصيل أكثر' }}</a>
@@ -154,9 +169,43 @@
         if (document.fonts && document.fonts.ready) document.fonts.ready.then(go); else go();
     })();
 
+    // the statistics keep to their room: from the right column (646 pt) to the button (or near the card's edge without
+    // one). Gaps first close from 34 pt down to 14 pt, then the type steps down — never below 55 %
+    (function () {
+        var row = document.getElementById('stats');
+        if (!row) { document.documentElement.dataset.statsScale = '1'; return; }
+        var PT = 0.75, GAP = 34, MIN_GAP = 14, RIGHT = 646;
+        var go = function () {
+            var page = document.getElementById('page').getBoundingClientRect();
+            var more = document.querySelector('.more');
+            var left = more ? (more.getBoundingClientRect().right - page.left) * PT + 16 : 324;
+            var room = RIGHT - left;
+            var items = Array.prototype.slice.call(row.children);
+            var gaps = Math.max(0, items.length - 1);
+            var words = function () { return items.reduce(function (w, it) { return w + it.getBoundingClientRect().width * PT; }, 0); };
+            var s = 1;
+            row.style.setProperty('--s', '1');
+            var w = words();
+            if (w + gaps * GAP > room) {
+                if (w + gaps * MIN_GAP <= room) {
+                    row.style.gap = ((room - w) / gaps).toFixed(2) + 'pt';
+                } else {
+                    row.style.gap = MIN_GAP + 'pt';
+                    while (s > 0.55 && words() + gaps * MIN_GAP > room) {
+                        s = Math.round((s - 0.02) * 100) / 100;
+                        row.style.setProperty('--s', s);
+                    }
+                }
+            }
+            document.documentElement.dataset.statsScale = s.toFixed(2);
+        };
+        if (document.fonts && document.fonts.ready) document.fonts.ready.then(go); else go();
+    })();
+
     // a description longer than its room steps its type down (never below 9.5 pt) instead of being cut off; with no
     // statistics under it, the room reaches further down and the description grows into it: larger type first (up to
-    // 14.5 pt), then wider line spacing, until it fills the room to the bottom
+    // 14.5 pt), then wider line spacing, until it fills the room to the bottom. A size chosen by hand (data-size) is
+    // kept as it is: only the line spacing still fills the room, and what does not fit is reported, not shrunk
     (function () {
         var d = document.getElementById('desc');
         if (!d) return;
@@ -164,28 +213,95 @@
         var size = BASE;
         var set = function (s, lh) { d.style.fontSize = s + 'pt'; d.style.lineHeight = (lh || s * RATIO).toFixed(2) + 'pt'; };
         var fit = function () { return d.scrollHeight <= d.clientHeight + 1; };
+        var manual = parseFloat(d.dataset.size || '');
+        var spread = function () {
+            // as many lines as now, spread over the whole room (but never more than twice the type apart)
+            if (!fit()) return;
+            var room = parseFloat(d.style.maxHeight);
+            var lines = Math.max(1, Math.round(d.scrollHeight / (size * RATIO * PX)));
+            set(size, Math.max(size * RATIO, Math.min(size * 2, room / lines - 0.05)));
+            if (!fit()) set(size);
+        };
         var go = function () {
+            if (manual > 0) {
+                size = manual;
+                set(size);
+                if (d.dataset.grow === '1') spread();
+                document.documentElement.dataset.descSize = size.toFixed(2);
+                document.documentElement.dataset.descScale = '1';
+                document.documentElement.dataset.overflow = fit() ? '0' : '1';
+                document.documentElement.dataset.fitted = '1';
+                return;
+            }
             if (d.dataset.grow === '1') {
                 while (size < 14.5) {
                     set(size + 0.25);
                     if (!fit()) { set(size); break; }
                     size = Math.round((size + 0.25) * 100) / 100;
                 }
-                if (fit()) {
-                    // as many lines as now, spread over the whole room (but never more than twice the type apart)
-                    var room = parseFloat(d.style.maxHeight);
-                    var lines = Math.max(1, Math.round(d.scrollHeight / (size * RATIO * PX)));
-                    set(size, Math.max(size * RATIO, Math.min(size * 2, room / lines - 0.05)));
-                    if (!fit()) set(size);
-                }
+                spread();
             }
             while (!fit() && size > 9.5) {
                 size = Math.round((size - 0.25) * 100) / 100;
                 set(size);
             }
             document.documentElement.dataset.descScale = (size / BASE).toFixed(2);
+            document.documentElement.dataset.descSize = size.toFixed(2);
             document.documentElement.dataset.overflow = fit() ? '0' : '1';
+            justify();
             document.documentElement.dataset.fitted = '1';
+        };
+        // Justify between words only: the text is laid out ragged (the lines break where they would anyway), each line is
+        // then held on its own and its spare width shared out between its words. A paragraph's last line is centred (the
+        // profile's way) or set from the right («justify»)
+        var justify = function () {
+            var mode = d.dataset.align;
+            if (mode === 'center') return;
+            var paras = d.textContent.split('\n');
+            d.textContent = '';
+            d.style.whiteSpace = 'normal';
+            var blocks = paras.map(function (p) {
+                var block = document.createElement('span');
+                block.style.display = 'block';
+                p.trim().split(/\s+/).filter(Boolean).forEach(function (w, i) {
+                    if (i) block.appendChild(document.createTextNode(' '));
+                    var s = document.createElement('span');
+                    s.textContent = w;
+                    block.appendChild(s);
+                });
+                if (!block.childNodes.length) block.appendChild(document.createElement('br'));
+                d.appendChild(block);
+                return block;
+            });
+            var width = d.clientWidth;
+            blocks.forEach(function (block) {
+                var words = Array.prototype.filter.call(block.childNodes, function (n) { return n.nodeType === 1 && n.tagName === 'SPAN'; });
+                if (!words.length) return;
+                var lines = [];
+                words.forEach(function (w) {
+                    var top = Math.round(w.getBoundingClientRect().top);
+                    var last = lines[lines.length - 1];
+                    if (last && Math.abs(last.top - top) < 3) last.words.push(w.textContent); else lines.push({ top: top, words: [w.textContent] });
+                });
+                block.textContent = '';
+                lines.forEach(function (line, i) {
+                    var el = document.createElement('span');
+                    el.style.display = 'block';
+                    el.style.whiteSpace = 'nowrap';
+                    el.textContent = line.words.join(' ');
+                    block.appendChild(el);
+                    if (i === lines.length - 1) {
+                        el.style.textAlign = mode === 'justify' ? 'right' : 'center';
+                        return;
+                    }
+                    if (line.words.length < 2) return;
+                    // the line's own width, measured unstretched
+                    el.style.display = 'inline-block';
+                    var natural = el.getBoundingClientRect().width;
+                    el.style.display = 'block';
+                    el.style.wordSpacing = Math.max(0, (width - natural) / (line.words.length - 1)) + 'px';
+                });
+            });
         };
         if (document.fonts && document.fonts.ready) document.fonts.ready.then(go); else go();
     })();

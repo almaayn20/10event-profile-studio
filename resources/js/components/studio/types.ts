@@ -22,6 +22,8 @@ export interface StudioProject {
     approved_at: string | null;
     // the editor's full copy
     description?: string;
+    desc_size?: number | null;
+    desc_align?: 'justify' | 'center' | null;
     details_url?: string;
     details_label?: string;
     stats?: StudioStat[];

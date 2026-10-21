@@ -3,8 +3,9 @@ import { xsrfHeader } from './compress';
 
 export type Fit = 'ok' | 'shrunk' | 'cut';
 
-/** How far the client and the title had to be set smaller to stay inside the card (1 = their own size). */
-export interface HeadFit { client: number; title: number }
+/** How far the client and the title had to be set smaller to stay inside the card (1 = their own size), and the
+ * description's type size as printed, in points. */
+export interface HeadFit { client: number; title: number; desc: number; stats: number }
 
 /**
  * The page exactly as it prints: the server renders the same template Chrome prints, and it is shown here at the
@@ -56,7 +57,7 @@ export function PagePreview({ url, data, version, onFit, onPick, onHeadFit }: {
         const read = () => {
             const root = doc.documentElement;
             if ((root.dataset.fitted !== '1' || root.dataset.titled !== '1') && tries++ < 40) return window.setTimeout(read, 100);
-            onHeadFit?.({ client: Number(root.dataset.clientScale ?? 1) || 1, title: Number(root.dataset.titleScale ?? 1) || 1 });
+            onHeadFit?.({ client: Number(root.dataset.clientScale ?? 1) || 1, title: Number(root.dataset.titleScale ?? 1) || 1, desc: Number(root.dataset.descSize ?? 11.46) || 11.46, stats: Number(root.dataset.statsScale ?? 1) || 1 });
             if (!onFit) return;
             onFit(root.dataset.overflow === '1' ? 'cut' : Number(root.dataset.descScale ?? 1) < 1 ? 'shrunk' : 'ok');
         };

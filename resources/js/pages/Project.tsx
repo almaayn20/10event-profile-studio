@@ -1,11 +1,12 @@
 import { Banner } from '@astryxdesign/core/Banner';
 import { Button } from '@astryxdesign/core/Button';
 import { Card } from '@astryxdesign/core/Card';
+import { SegmentedControl, SegmentedControlItem } from '@astryxdesign/core/SegmentedControl';
 import { NumberInput } from '@astryxdesign/core/NumberInput';
 import { TextArea } from '@astryxdesign/core/TextArea';
 import { TextInput } from '@astryxdesign/core/TextInput';
 import { Link, router, useForm } from '@inertiajs/react';
-import { ArrowLeft, ArrowRight, ArrowUpDown, BookPlus, Check, Download, Plus, RefreshCw, RotateCcw, Save, Trash2, Undo2, X } from 'lucide-react';
+import { AArrowDown, AArrowUp, ArrowLeft, ArrowRight, ArrowUpDown, BookPlus, Check, Download, Plus, RefreshCw, RotateCcw, Save, Trash2, Undo2, WrapText, X } from 'lucide-react';
 import { useState } from 'react';
 import StudioLayout from '@/components/layout/StudioLayout';
 import { CropDialog } from '@/components/studio/CropDialog';
@@ -26,18 +27,25 @@ interface Props {
 }
 
 export default function StudioEdit({ project, profile, suggestedAt, defaults, card }: Props) {
-    const { t, dir } = useT();
+    const { t, dir, num } = useT();
     const form = useForm({
         client: project.client ?? '',
         title: project.title ?? '',
         description: project.description ?? '',
+        desc_size: (project.desc_size ?? null) as number | null,
+        desc_align: (project.desc_align ?? null) as 'justify' | 'center' | null,
         details_url: project.details_url ?? '',
         details_label: project.details_label ?? '',
         stats: (project.stats ?? []) as StudioStat[],
     });
     const d = form.data;
     const [fit, setFit] = useState<Fit>('ok');
-    const [head, setHead] = useState<HeadFit>({ client: 1, title: 1 });
+    const [head, setHead] = useState<HeadFit>({ client: 1, title: 1, desc: 11.46, stats: 1 });
+    // the description's type: chosen by hand in half points, starting from the size it prints at now
+    const descSize = d.desc_size ?? head.desc;
+    const stepSize = (by: number) => form.setData('desc_size', Math.max(8, Math.min(18, Math.round((descSize + by) * 2) / 2)));
+    // every line break goes: the text runs on and breaks only where the line is full
+    const mergeLines = () => form.setData('description', d.description.replace(/[ \t]*\n+[ \t]*/g, ' ').replace(/ {2,}/g, ' ').trim());
     // set noticeably smaller to fit the card: say so, by how much
     const smaller = (k: number) => (k < 0.8 ? { type: 'warning' as const, message: t('studio.edit.head_shrunk', { pct: Math.round(k * 100) }) } : undefined);
     const [dialog, setDialog] = useState<null | 'place' | 'link' | 'move'>(null);
@@ -122,7 +130,28 @@ export default function StudioEdit({ project, profile, suggestedAt, defaults, ca
                             </div>
                             <TextArea width="100%" label={t('studio.edit.description')} description={t('studio.edit.description_hint')} rows={7} maxLength={2000}
                                 value={d.description} onChange={(v) => form.setData('description', v)}
-                                status={err('description') ?? (fit === 'cut' ? { type: 'error', message: t('studio.edit.description_cut') } : fit === 'shrunk' ? { type: 'warning', message: t('studio.edit.description_long') } : undefined)} />
+                                status={err('description') ?? err('desc_size') ?? (fit === 'cut' ? { type: 'error', message: t(d.desc_size ? 'studio.edit.desc_size_cut' : 'studio.edit.description_cut') } : fit === 'shrunk' ? { type: 'warning', message: t('studio.edit.description_long') } : undefined)} />
+                            <div className="studio-desc-tools" role="toolbar" aria-label={t('studio.edit.desc_tools')}>
+                                <div className="studio-desc-size">
+                                    <Button size="sm" variant="secondary" icon={<AArrowDown size={16} />} label={t('studio.edit.desc_smaller')} isIconOnly tooltip={t('studio.edit.desc_smaller')}
+                                        isDisabled={descSize <= 8} onClick={() => stepSize(-0.5)} />
+                                    <span className="studio-desc-size-value" aria-live="polite">
+                                        <bdi className="ltr">{num(descSize, 1)}</bdi> {t('studio.edit.desc_pt')}
+                                        <span className="muted"> · {d.desc_size ? t('studio.edit.desc_manual') : t('studio.edit.desc_auto')}</span>
+                                    </span>
+                                    <Button size="sm" variant="secondary" icon={<AArrowUp size={16} />} label={t('studio.edit.desc_bigger')} isIconOnly tooltip={t('studio.edit.desc_bigger')}
+                                        isDisabled={descSize >= 18} onClick={() => stepSize(0.5)} />
+                                    {d.desc_size !== null && <Button size="sm" variant="ghost" label={t('studio.edit.desc_auto_back')} onClick={() => form.setData('desc_size', null)} />}
+                                </div>
+                                <SegmentedControl size="sm" label={t('studio.edit.desc_align')} value={d.desc_align ?? 'profile'}
+                                    onChange={(v) => form.setData('desc_align', v === 'profile' ? null : (v as 'justify' | 'center'))}>
+                                    <SegmentedControlItem value="justify" label={t('studio.edit.align_justify')} />
+                                    <SegmentedControlItem value="profile" label={t('studio.edit.align_profile')} />
+                                    <SegmentedControlItem value="center" label={t('studio.edit.align_center')} />
+                                </SegmentedControl>
+                                <Button size="sm" variant="ghost" icon={<WrapText size={15} />} label={t('studio.edit.merge_lines')} tooltip={t('studio.edit.merge_lines_hint')}
+                                    isDisabled={!/\n/.test(d.description)} onClick={mergeLines} />
+                            </div>
                             <div className="grid gap-[12px] sm:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
                                 <TextInput width="100%" label={t('studio.edit.details_url')} description={t('studio.edit.details_url_hint')} value={d.details_url} dir="ltr"
                                     placeholder="https://" onChange={(v) => form.setData('details_url', v)} status={err('details_url')} isOptional />
@@ -142,6 +171,7 @@ export default function StudioEdit({ project, profile, suggestedAt, defaults, ca
                                 </div>
                             </div>
                             <p className="muted" style={{ margin: 0 }}>{t('studio.edit.stats_hint')}</p>
+                            {d.stats.length > 0 && head.stats < 0.85 && <Banner status="warning" title={t('studio.edit.stats_shrunk', { pct: Math.round(head.stats * 100) })} collapsible={false} />}
                             {d.stats.length === 0 && <p className="muted tinted" style={{ margin: 0 }}>{t('studio.edit.stats_empty')}</p>}
                             {d.stats.map((s, i) => (
                                 <div key={i} className="studio-stat-row">

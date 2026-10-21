@@ -27,7 +27,10 @@ final class PageGeometry
         ['value' => '1 يـــوم', 'label' => 'للفعالية'],
     ];
 
-    /** Right edges of the (up to three) statistic columns, right to left. */
+    /**
+     * Right edges of the profile's three statistic columns, right to left. The page now lays the statistics out as a
+     * row from the first edge, evenly apart (about these widths for the defaults); the others are kept for reference.
+     */
     public const STAT_COLUMNS = [646.0, 579.7, 502.8];
 
     /**

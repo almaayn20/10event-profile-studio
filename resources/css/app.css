@@ -235,3 +235,7 @@ body { font-size: 16px; }
     .studio-version > span:nth-child(3), .studio-version > span:nth-child(4) { display: none; }
 }
 
+
+.studio-desc-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; margin-top: -4px; }
+.studio-desc-size { display: inline-flex; align-items: center; gap: 6px; }
+.studio-desc-size-value { min-width: 96px; text-align: center; font-size: .9rem; }
