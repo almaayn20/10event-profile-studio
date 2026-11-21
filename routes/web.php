@@ -26,6 +26,9 @@ Route::name('studio.')->group(function () {
             Route::post('/shuffle', [ProjectController::class, 'shuffle'])->name('shuffle');
             Route::post('/images', [ImageController::class, 'store'])->name('images.store')->middleware('throttle:30,1');
             Route::get('/thumb', [ProjectController::class, 'thumb'])->name('thumb');
+            Route::get('/logo', [ProjectController::class, 'logo'])->name('logo');
+            Route::post('/logo', [ProjectController::class, 'logoStore'])->name('logo.store')->middleware('throttle:30,1');
+            Route::delete('/logo', [ProjectController::class, 'logoDestroy'])->name('logo.destroy');
             Route::get('/pdf', [ProjectController::class, 'pdf'])->name('pdf');
             Route::post('/approve', [ProjectController::class, 'approve'])->name('approve');
             Route::post('/refresh', [ProjectController::class, 'refresh'])->name('refresh');

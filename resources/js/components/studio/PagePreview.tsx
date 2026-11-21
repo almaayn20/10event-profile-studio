@@ -1,4 +1,6 @@
+import { usePage } from '@inertiajs/react';
 import { useEffect, useRef, useState } from 'react';
+import type { SharedProps } from '@/lib/types';
 import { xsrfHeader } from './compress';
 
 export type Fit = 'ok' | 'shrunk' | 'cut';
@@ -9,13 +11,16 @@ export interface HeadFit { client: number; title: number; desc: number; stats: n
 
 /**
  * The page exactly as it prints: the server renders the same template Chrome prints, and it is shown here at the
- * width available (the page is 960 × 540 pt = 1280 × 720 CSS px, scaled down as a whole).
+ * width available (the page in points × 4/3 = CSS px — 960 × 540 pt is 1280 × 720 — scaled down as a whole).
  */
 export function PagePreview({ url, data, version, onFit, onPick, onHeadFit }: {
     url: string; data: Record<string, any>; version: string; onFit?: (f: Fit) => void; onPick?: (imageId: number) => void; onHeadFit?: (f: HeadFit) => void;
 }) {
     const box = useRef<HTMLDivElement>(null);
     const frame = useRef<HTMLIFrameElement>(null);
+    const page = usePage<SharedProps>().props.app?.page ?? { w: 960, h: 540 };
+    const PW = Math.ceil((page.w * 4) / 3);
+    const PH = Math.ceil((page.h * 4) / 3);
     const [scale, setScale] = useState(0.5);
     const [html, setHtml] = useState('');
     const [loading, setLoading] = useState(true);
@@ -23,10 +28,10 @@ export function PagePreview({ url, data, version, onFit, onPick, onHeadFit }: {
     useEffect(() => {
         const el = box.current;
         if (!el) return;
-        const ro = new ResizeObserver(() => setScale(el.clientWidth / 1280));
+        const ro = new ResizeObserver(() => setScale(el.clientWidth / PW));
         ro.observe(el);
         return () => ro.disconnect();
-    }, []);
+    }, [PW]);
 
     const body = JSON.stringify(data);
     useEffect(() => {
@@ -57,7 +62,7 @@ export function PagePreview({ url, data, version, onFit, onPick, onHeadFit }: {
         const read = () => {
             const root = doc.documentElement;
             if ((root.dataset.fitted !== '1' || root.dataset.titled !== '1') && tries++ < 40) return window.setTimeout(read, 100);
-            onHeadFit?.({ client: Number(root.dataset.clientScale ?? 1) || 1, title: Number(root.dataset.titleScale ?? 1) || 1, desc: Number(root.dataset.descSize ?? 11.46) || 11.46, stats: Number(root.dataset.statsScale ?? 1) || 1 });
+            onHeadFit?.({ client: Number(root.dataset.clientScale ?? 1) || 1, title: Number(root.dataset.titleScale ?? 1) || 1, desc: Number(root.dataset.descSize ?? 0) || 0, stats: Number(root.dataset.statsScale ?? 1) || 1 });
             if (!onFit) return;
             onFit(root.dataset.overflow === '1' ? 'cut' : Number(root.dataset.descScale ?? 1) < 1 ? 'shrunk' : 'ok');
         };
@@ -65,9 +70,9 @@ export function PagePreview({ url, data, version, onFit, onPick, onHeadFit }: {
     };
 
     return (
-        <div ref={box} className={`studio-preview${onPick ? ' is-pickable' : ''}`} style={{ height: 720 * scale }} aria-busy={loading}>
+        <div ref={box} className={`studio-preview${onPick ? ' is-pickable' : ''}`} style={{ height: PH * scale }} aria-busy={loading}>
             <iframe ref={frame} title="preview" srcDoc={html} onLoad={onLoad} scrolling="no" tabIndex={-1}
-                style={{ width: 1280, height: 720, transform: `scale(${scale})`, transformOrigin: 'top left' }} />
+                style={{ width: PW, height: PH, transform: `scale(${scale})`, transformOrigin: 'top left' }} />
             {loading && <span className="studio-preview-busy" />}
         </div>
     );
@@ -84,7 +89,8 @@ function pickable(doc: Document, onPick: (id: number) => void) {
     const at = (e: MouseEvent) => {
         const pt = new DOMPoint(e.clientX * 0.75, e.clientY * 0.75);    // CSS px → the page's points
         if (card?.isPointInFill(pt)) return null;
-        return cells.find((c) => {
+        // the topmost first: a thumbnail lies over the main picture
+        return [...cells].reverse().find((c) => {
             const r = c.getBoundingClientRect();
             return e.clientX >= r.left && e.clientX < r.right && e.clientY >= r.top && e.clientY < r.bottom;
         }) ?? null;

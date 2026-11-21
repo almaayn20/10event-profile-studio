@@ -17,7 +17,9 @@ export default function StudioIndex({ projects, profile }: { projects: StudioPro
     const [filter, setFilter] = useState<'all' | 'draft' | 'approved'>('all');
     const [creating, setCreating] = useState(false);
     const shown = projects.filter((p) => filter === 'all' || p.status === filter);
-    const statsShown = usePage<SharedProps>().props.app.statsShown;
+    const { statsShown, edition } = usePage<SharedProps>().props.app;
+    const gift = edition === 'gift';
+    const create = (kind: string) => router.post(route('studio.projects.store'), { kind }, { onStart: () => setCreating(true), onFinish: () => setCreating(false) });
     const [savingStats, setSavingStats] = useState(false);
     // one switch for every project; the pages already in the profile that change are marked for updating
     const setStats = (on: boolean) => {
@@ -28,8 +30,10 @@ export default function StudioIndex({ projects, profile }: { projects: StudioPro
     return (
         <StudioLayout title={t('studio.index.title')}>
             <PageHead title={t('studio.index.title')} subtitle={t('studio.index.subtitle')}
-                actions={<Button variant="primary" icon={<Plus size={16} />} label={t('studio.index.new')} isLoading={creating}
-                    onClick={() => router.post(route('studio.projects.store'), {}, { onStart: () => setCreating(true), onFinish: () => setCreating(false) })} />} />
+                actions={<div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                    {gift && <Button variant="secondary" icon={<Plus size={16} />} label={t('studio.index.new_trio')} isDisabled={creating} onClick={() => create('trio')} />}
+                    <Button variant="primary" icon={<Plus size={16} />} label={t('studio.index.new')} isLoading={creating} onClick={() => create('project')} />
+                </div>} />
 
             <Card padding={0}>
                 <div className="studio-profile-strip">
@@ -73,8 +77,8 @@ export default function StudioIndex({ projects, profile }: { projects: StudioPro
                                 {p.thumb ? <img src={p.thumb} alt="" loading="lazy" /> : <span><ImageIcon size={26} aria-hidden /></span>}
                             </div>
                             <div className="studio-card-body">
-                                <b className="studio-card-title"><bdi>{p.title || t('studio.index.untitled')}</bdi></b>
-                                <span className="muted"><bdi>{p.client || t('studio.index.no_client')}</bdi> · {t('studio.index.images', { count: num(p.images_count) })}</span>
+                                <b className="studio-card-title"><bdi>{(gift ? p.client : p.title) || t('studio.index.untitled')}</bdi></b>
+                                <span className="muted"><bdi>{(gift ? p.title : p.client) || t('studio.index.no_client')}</bdi> · {t('studio.index.images', { count: num(p.images_count) })}</span>
                                 <StatusBadges project={p} />
                             </div>
                         </Link>

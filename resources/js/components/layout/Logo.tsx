@@ -1,6 +1,10 @@
-import logo from './logo-10event.svg?raw';
+import { usePage } from '@inertiajs/react';
+import type { SharedProps } from '@/lib/types';
+import eventLogo from './logo-10event.svg?raw';
+import giftLogo from './logo-10gift.svg?raw';
 
-/** The 10 Event mark, drawn in the current text colour. */
+/** The studio's mark — 10 Event or 10 Gift, by the edition — drawn in the current text colour. */
 export function Logo({ size = 44 }: { size?: number }) {
-    return <span className="logo-10event" style={{ height: size, width: size * 1.1 }} dangerouslySetInnerHTML={{ __html: logo }} />;
+    const gift = usePage<SharedProps>().props.app?.edition === 'gift';
+    return <span className="logo-10event" style={{ height: size, width: size * 1.1 }} dangerouslySetInnerHTML={{ __html: gift ? giftLogo : eventLogo }} />;
 }

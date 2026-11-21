@@ -25,8 +25,8 @@ export function placeImage(win: StudioWindow, iw: number, ih: number, fx: number
  * page (only the part outside the white card); what lies under the card is veiled, what falls outside the window is
  * faded, so the view is exactly the page's.
  */
-export function CropDialog({ image, win, card, busy, onSave, onClose }: {
-    image: StudioImage; win: StudioWindow; card: string; busy: boolean;
+export function CropDialog({ image, win, card, stroke = BROWN, busy, onSave, onClose }: {
+    image: StudioImage; win: StudioWindow; card: string; stroke?: string; busy: boolean;
     onSave: (crop: StudioCrop | null) => void; onClose: () => void;
 }) {
     const { t } = useT();
@@ -96,7 +96,7 @@ export function CropDialog({ image, win, card, busy, onSave, onClose }: {
                         {picture(1)}
                         <svg viewBox={`${win.x} ${win.y} ${win.w} ${win.h}`} preserveAspectRatio="none" aria-hidden
                             style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none' }}>
-                            <path d={card} fill="#fff" fillOpacity={0.88} stroke={BROWN} strokeWidth={2} vectorEffect="non-scaling-stroke" />
+                            {card && <path d={card} fill="#fff" fillOpacity={0.88} stroke={stroke} strokeWidth={2} vectorEffect="non-scaling-stroke" />}
                         </svg>
                     </div>
                 </div>

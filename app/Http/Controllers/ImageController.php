@@ -30,7 +30,7 @@ class ImageController extends Controller
     /** Give a picture priority 1, 2 or 3 (taking it from whichever picture had it), or make it ordinary again. */
     public function priority(Request $request, Image $image)
     {
-        $data = $request->validate(['priority' => ['nullable', 'integer', 'in:1,2,3']]);
+        $data = $request->validate(['priority' => ['nullable', 'integer', 'between:1,'.\App\Support\Edition::maxPriority()]]);
         $priority = $data['priority'] ?? null;
         DB::transaction(function () use ($image, $priority) {
             if ($priority) {

@@ -5,7 +5,7 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { Logo } from '@/components/layout/Logo';
 import { useT } from '@/lib/i18n';
 
-/** The studio's frame: the 10 Event mark, the three sections, and sign out. A drawer below 1080 px. */
+/** The studio's frame: the studio's mark (10 Event or 10 Gift), the three sections, and sign out. A drawer below 1080 px. */
 export default function StudioLayout({ title, wide = false, children }: { title: string; wide?: boolean; children: ReactNode }) {
     const { t } = useT();
     const [open, setOpen] = useState(false);
@@ -24,7 +24,7 @@ export default function StudioLayout({ title, wide = false, children }: { title:
                 <header className="navbar">
                     <nav className="navbar-inner" aria-label={t('studio.name')}>
                         <div className="navbar-start">
-                            <Link href={route('studio.index')} className="navbar-brand" aria-label="10 Event"><Logo size={44} /></Link>
+                            <Link href={route('studio.index')} className="navbar-brand" aria-label={t('studio.brand')}><Logo size={44} /></Link>
                             <span className="navbar-badge">{t('studio.badge')}</span>
                         </div>
                         <div className="navbar-links">

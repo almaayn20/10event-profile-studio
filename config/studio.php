@@ -2,6 +2,12 @@
 
 return [
     /*
+    | Which profile this studio makes: «event» (10 Event, 960 × 540 pt) or «gift» (10 Gift, 566.93 × 311.81 pt).
+    | One code base; each edition runs on its own with its own data.
+    */
+    'edition' => env('STUDIO_EDITION', 'event'),
+
+    /*
     | One shared password for the team. STUDIO_PASSWORD is only the first one: once somebody sets another from the
     | studio's settings page, that one is used.
     */

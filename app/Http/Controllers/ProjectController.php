@@ -6,6 +6,8 @@ use App\Exceptions\UserFacingException;
 use App\Models\Project;
 use App\Models\Version;
 use App\Services\Studio;
+use App\Support\Edition;
+use App\Support\GiftGeometry;
 use App\Support\PageGeometry;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
@@ -26,9 +28,14 @@ class ProjectController extends Controller
         ]);
     }
 
-    public function store()
+    public function store(Request $request)
     {
-        $project = Project::create(Project::defaults() + ['layout_seed' => random_int(1, 999_999)]);
+        $kind = in_array($request->input('kind'), Edition::kinds(), true) ? $request->input('kind') : 'project';
+        $defaults = Project::defaults();
+        if ($kind === 'trio') {
+            $defaults = ['title' => 'دروع', 'stats' => [], 'color' => GiftGeometry::DEFAULT_COLOR];
+        }
+        $project = Project::create($defaults + ['kind' => $kind, 'layout_seed' => random_int(1, 999_999)]);
 
         return redirect()->route('studio.projects.edit', $project);
     }
@@ -45,7 +52,12 @@ class ProjectController extends Controller
             ] : null,
             'suggestedAt' => $this->suggestedAt($current),
             'defaults' => Project::defaults(),
-            'card' => PageGeometry::BLOB,
+            'card' => Edition::gift() ? GiftGeometry::coverPath($project) : PageGeometry::BLOB,
+            // the colours other pages already use, to pick from
+            'palette' => Edition::gift()
+                ? Project::whereNotNull('color')->pluck('color')->map(fn ($c) => strtoupper($c))->countBy()->sortDesc()->keys()->take(24)->values()
+                : [],
+            'categories' => Edition::gift() ? GiftGeometry::CATEGORIES : [],
         ]);
     }
 
@@ -162,6 +174,37 @@ class ProjectController extends Controller
         return back()->with('success', 'ui.studio.linked');
     }
 
+    /** The client's logo on a gift page: put in (replacing any), shown, or taken off. */
+    public function logoStore(Request $request, Project $project)
+    {
+        $request->validate(['logo' => ['required', 'file', 'max:'.((int) config('studio.image_max_mb') * 1024)]]);
+        $this->studio->storeLogo($project, $request->file('logo'));
+        $this->touched($project);
+
+        return back();
+    }
+
+    public function logoDestroy(Project $project)
+    {
+        $this->studio->deleteLogo($project);
+        $this->touched($project);
+
+        return back();
+    }
+
+    public function logo(Project $project)
+    {
+        $path = $project->logo['path'] ?? null;
+        abort_unless($path && Storage::disk('local')->exists($path), 404);
+        $headers = ['Cache-Control' => 'private, max-age=604800'];
+        if (str_ends_with($path, '.svg')) {
+            // shown only as a picture; no script in it may run
+            $headers += ['Content-Type' => 'image/svg+xml', 'Content-Security-Policy' => "default-src 'none'; style-src 'unsafe-inline'; img-src data:"];
+        }
+
+        return response()->file(Storage::disk('local')->path($path), $headers);
+    }
+
     public function thumb(Project $project)
     {
         abort_unless($project->thumb_path && Storage::disk('local')->exists($project->thumb_path), 404);
@@ -197,12 +240,15 @@ class ProjectController extends Controller
 
     private function validated(Request $request): array
     {
+        $gift = Edition::gift();
         $data = $request->validate([
             'client' => ['nullable', 'string', 'max:160'],
             'title' => ['nullable', 'string', 'max:160'],
             'description' => ['nullable', 'string', 'max:2000'],
-            'desc_size' => ['nullable', 'numeric', 'between:8,18'],
-            'desc_align' => ['nullable', 'in:justify,center'],
+            // the gift page is printed small (its description is 5 pt), so its sizes are smaller
+            'desc_size' => ['nullable', 'numeric', $gift ? 'between:3,9' : 'between:8,18'],
+            'desc_align' => ['nullable', 'in:justify,center,right'],
+            'color' => ['nullable', 'regex:/^#[0-9A-Fa-f]{6}$/'],
             'details_url' => ['nullable', 'url:http,https', 'max:600'],
             'details_label' => ['nullable', 'string', 'max:60'],
             'stats' => ['nullable', 'array', 'max:3'],
@@ -212,6 +258,11 @@ class ProjectController extends Controller
         $data['stats'] = array_values(array_map(fn ($s) => ['value' => trim((string) ($s['value'] ?? '')), 'label' => trim((string) ($s['label'] ?? ''))], $data['stats'] ?? []));
         foreach (['client', 'title'] as $k) {
             $data[$k] = trim((string) ($data[$k] ?? ''));
+        }
+        if (! $gift || ! filled($data['color'] ?? null)) {
+            unset($data['color']);
+        } else {
+            $data['color'] = strtoupper($data['color']);
         }
 
         return $data;

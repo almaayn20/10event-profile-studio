@@ -55,6 +55,7 @@ def page(job: dict, work: str) -> dict:
         if os.path.exists(p):
             os.remove(p)
     subprocess.run([_chrome(job), "--headless", "--disable-gpu", "--no-sandbox", "--no-pdf-header-footer",
+                    "--use-mock-keychain", "--password-store=basic",
                     "--allow-file-access-from-files", "--virtual-time-budget=4000", "--run-all-compositor-stages-before-draw",
                     f"--print-to-pdf={raw}", "file://" + os.path.abspath(html)],
                    capture_output=True, timeout=int(job.get("timeout") or 90))

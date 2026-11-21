@@ -79,6 +79,52 @@ class Studio
         ]);
     }
 
+    /**
+     * The client's logo for a gift page, kept as it came (SVG, PNG, JPG or WEBP: a logo keeps its transparency and its
+     * lines stay sharp); its own size is read so it can be fitted into the tab.
+     */
+    public function storeLogo(Project $project, UploadedFile $file): void
+    {
+        $ext = strtolower($file->getClientOriginalExtension() ?: $file->guessExtension() ?: '');
+        if (! in_array($ext, ['svg', 'png', 'jpg', 'jpeg', 'webp'], true)) {
+            throw new UserFacingException('file_type_not_allowed', ['types' => 'SVG · PNG · JPG · WEBP']);
+        }
+        $size = $ext === 'svg' ? self::svgSize((string) file_get_contents($file->getRealPath())) : @getimagesize($file->getRealPath());
+        if (! $size || $size[0] <= 0 || $size[1] <= 0) {
+            throw new UserFacingException('portfolio_image_unreadable');
+        }
+        $this->deleteLogo($project, false);
+        $path = $project->dir().'/logo-'.Str::lower(Str::random(8)).'.'.($ext === 'jpeg' ? 'jpg' : $ext);
+        self::disk()->makeDirectory($project->dir());
+        File::copy($file->getRealPath(), self::abs($path));
+        $project->logo = ['path' => $path, 'w' => (float) $size[0], 'h' => (float) $size[1], 'box' => null, 'tab' => null];
+        $project->save();
+    }
+
+    public function deleteLogo(Project $project, bool $save = true): void
+    {
+        if (! empty($project->logo['path'])) {
+            self::disk()->delete($project->logo['path']);
+        }
+        $project->logo = null;
+        if ($save) {
+            $project->save();
+        }
+    }
+
+    /** An SVG's own width and height: its viewBox, else its width and height attributes. */
+    public static function svgSize(string $svg): ?array
+    {
+        if (preg_match('/<svg\b[^>]*\bviewBox\s*=\s*["\']\s*[-\d.eE]+[\s,]+[-\d.eE]+[\s,]+([\d.eE]+)[\s,]+([\d.eE]+)/i', $svg, $m)) {
+            return [(float) $m[1], (float) $m[2]];
+        }
+        if (preg_match('/<svg\b[^>]*\bwidth\s*=\s*["\']([\d.]+)/i', $svg, $w) && preg_match('/<svg\b[^>]*\bheight\s*=\s*["\']([\d.]+)/i', $svg, $h)) {
+            return [(float) $w[1], (float) $h[1]];
+        }
+
+        return null;
+    }
+
     public function deleteImage(Image $image): void
     {
         self::disk()->delete(array_filter([$image->path, $image->preview_path]));
@@ -140,6 +186,28 @@ class Studio
         $content = $override ?? $project->content();
         if (! \App\Support\Settings::statsShown()) {
             $content['stats'] = [];          // switched off for every project: the page is drawn as if it had none
+        }
+        $fonts = [
+            'medium' => $print ? 'file://'.Fonts::path('medium') : route('studio.fonts', ['weight' => 'medium', 'v' => Fonts::version()]),
+            'bold' => $print ? 'file://'.Fonts::path('bold') : route('studio.fonts', ['weight' => 'bold', 'v' => Fonts::version()]),
+        ];
+
+        if (\App\Support\Edition::gift()) {
+            $logo = $content['logo'] ?? null;
+            $place = \App\Support\GiftGeometry::logoPlace($logo);
+            $logoSrc = null;
+            if ($place['box'] && self::disk()->exists($logo['path'])) {
+                $logoSrc = $print ? 'file://'.self::abs($logo['path']) : $project->logoUrl();
+            }
+
+            return view('portfolio.gift', [
+                'picturePage' => $project->isPicturePage(),
+                'project' => $content,
+                'cells' => $cells,
+                'logo' => $logoSrc ? ['src' => $logoSrc, 'box' => $place['box']] : null,
+                'tab' => $place['tab'],
+                'fonts' => $fonts,
+            ])->render();
         }
 
         return view('portfolio.page', [

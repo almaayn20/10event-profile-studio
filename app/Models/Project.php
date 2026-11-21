@@ -3,6 +3,8 @@
 namespace App\Models;
 
 use App\Support\Collage;
+use App\Support\Edition;
+use App\Support\GiftGeometry;
 use App\Support\PageGeometry;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Model;
@@ -19,12 +21,13 @@ class Project extends Model
     protected $fillable = [
         'kind', 'client', 'title', 'description', 'desc_size', 'desc_align', 'details_url', 'details_label', 'stats', 'status', 'layout_seed', 'layout',
         'page_path', 'thumb_path', 'rendered_at', 'profile_version_id', 'profile_page', 'profile_stale', 'approved_at',
+        'color', 'logo',
     ];
 
     protected function casts(): array
     {
         return [
-            'stats' => 'array', 'layout' => 'array', 'profile_stale' => 'boolean', 'desc_size' => 'float',
+            'stats' => 'array', 'layout' => 'array', 'logo' => 'array', 'profile_stale' => 'boolean', 'desc_size' => 'float',
             'rendered_at' => 'datetime', 'approved_at' => 'datetime',
         ];
     }
@@ -70,6 +73,12 @@ class Project extends Model
     /** Re-tile the page from its pictures and the current seed. */
     public function relayout(): void
     {
+        if (Edition::gift()) {
+            // the gift page has fixed places, filled by priority (GiftGeometry::windows); nothing to arrange
+            $this->layout = ['fixed' => true];
+
+            return;
+        }
         $images = $this->images()->get();
         $this->layout = Collage::arrange($images->map(fn (Image $i) => [
             'id' => $i->id, 'w' => $i->width, 'h' => $i->height, 'priority' => $i->priority,
@@ -85,6 +94,9 @@ class Project extends Model
      */
     public function windows(): array
     {
+        if (Edition::gift()) {
+            return GiftGeometry::windows($this);
+        }
         $images = $this->images->keyBy('id');
         $out = [];
         foreach ($this->layout ?? [] as $c) {
@@ -120,12 +132,30 @@ class Project extends Model
             'details_url' => $this->details_url,
             'details_label' => $this->details_label,
             'stats' => array_values(array_filter($this->stats ?? [], fn ($s) => filled($s['value'] ?? null) || filled($s['label'] ?? null))),
+            'kind' => $this->kind ?? 'project',
+            'color' => self::cleanColor($this->color),
+            'logo' => $this->logo,
         ];
+    }
+
+    public static function cleanColor(?string $color): string
+    {
+        return is_string($color) && preg_match('/^#[0-9A-Fa-f]{6}$/', $color) ? strtoupper($color) : GiftGeometry::DEFAULT_COLOR;
     }
 
     public static function defaults(): array
     {
+        if (Edition::gift()) {
+            return ['stats' => GiftGeometry::DEFAULT_STATS, 'details_label' => '', 'title' => GiftGeometry::CATEGORIES[0], 'color' => GiftGeometry::DEFAULT_COLOR];
+        }
+
         return ['stats' => PageGeometry::DEFAULT_STATS, 'details_label' => 'لتفاصيل أكثر'];
+    }
+
+    /** The logo's address for the editor (null when there is none). */
+    public function logoUrl(): ?string
+    {
+        return ! empty($this->logo['path']) ? route('studio.projects.logo', ['project' => $this->public_id, 'v' => substr(md5($this->logo['path']), 0, 8)]) : null;
     }
 
     /** The printed page's picture; before the first print, the page's main picture stands in. */
@@ -165,7 +195,10 @@ class Project extends Model
                 'stats' => $this->stats ?? [],
                 'layout_seed' => $this->layout_seed,
                 'images' => $this->images->map->present()->values(),
-                'windows' => $this->layout ? array_map(fn ($w) => array_diff_key($w, ['img' => 1]), $this->windows()) : [],
+                'windows' => ($this->layout || Edition::gift()) ? array_map(fn ($w) => array_diff_key($w, ['img' => 1]), $this->windows()) : [],
+                'color' => self::cleanColor($this->color),
+                'logo' => $this->logoUrl(),
+                'logo_box' => $this->logo['box'] ?? null,
             ];
         }
 

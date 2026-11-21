@@ -239,3 +239,20 @@ body { font-size: 16px; }
 .studio-desc-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; margin-top: -4px; }
 .studio-desc-size { display: inline-flex; align-items: center; gap: 6px; }
 .studio-desc-size-value { min-width: 96px; text-align: center; font-size: .9rem; }
+
+/* the gift page: its picture places (the main one, thumbnails 1 · 2 · 3) and the colour + logo card */
+.studio-prio.is-gift { display: flex; flex-wrap: wrap; }
+.studio-prio.is-gift button { flex: 1 1 auto; padding-inline: 6px; white-space: nowrap; }
+.studio-image-hidden { position: absolute; bottom: 6px; inset-inline-start: 6px; padding: 2px 8px; border-radius: 10px; font-size: .72rem;
+    background: rgba(20, 20, 20, .78); color: #fff; }
+.studio-swatches { display: flex; flex-wrap: wrap; gap: 6px; }
+.studio-swatch { width: 26px; height: 26px; border-radius: 7px; border: 1px solid rgba(0, 0, 0, .15); cursor: pointer; padding: 0; }
+.studio-swatch.is-on { outline: 2px solid var(--color-text-primary); outline-offset: 2px; }
+.studio-color-row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.studio-color-row input[type="color"] { width: 44px; height: 34px; padding: 0; border: 1px solid var(--color-border); border-radius: 8px; background: none; cursor: pointer; }
+.studio-logo-row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+.studio-logo-tile { height: 56px; min-width: 96px; padding: 8px 14px; border-radius: 0 12px 12px 0; display: flex; align-items: center; }
+.studio-logo-tile img { max-height: 40px; max-width: 160px; display: block; }
+.studio-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.studio-chip { font: inherit; font-size: .82rem; padding: 3px 10px; border-radius: 12px; border: 1px solid var(--color-border); background: var(--color-background-surface); cursor: pointer; color: var(--color-text-secondary); }
+.studio-chip:hover, .studio-chip.is-on { color: var(--color-text-primary); border-color: var(--color-text-secondary); }

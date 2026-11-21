@@ -9,9 +9,18 @@ import { useT } from '@/lib/i18n';
 import { lighten } from './compress';
 import type { StudioImage } from './types';
 
-/** The page's pictures: add any number, mark up to three as 1 · 2 · 3 (the large ones), remove, rearrange. */
-export function ImagesPanel({ projectId, images, onCrop }: { projectId: string; images: StudioImage[]; onCrop?: (img: StudioImage) => void }) {
+/**
+ * The page's pictures: add any number, mark up to three as 1 · 2 · 3 (the large ones), remove, rearrange. On a gift
+ * page the marks are the places: the main picture and thumbnails 1 · 2 · 3 (or the trio's panels); a picture the page
+ * has no room for is marked as not shown.
+ */
+export function ImagesPanel({ projectId, images, onCrop, gift = false, kind = 'project', shown }: {
+    projectId: string; images: StudioImage[]; onCrop?: (img: StudioImage) => void; gift?: boolean; kind?: string; shown?: number[];
+}) {
     const { t, num } = useT();
+    const ranks = gift ? (kind === 'trio' ? [1, 2, 3] : [1, 2, 3, 4]) : [1, 2, 3];
+    const rankLabel = (n: number) => (!gift ? num(n) : kind === 'trio' ? num(n) : n === 1 ? t('studio.edit.priority_main') : t('studio.edit.priority_thumb', { n: num(n - 1) }));
+    const hint = gift && kind === 'trio' ? t('studio.edit.images_hint_trio') : t('studio.edit.images_hint');
     const input = useRef<HTMLInputElement>(null);
     const guard = useUploadGuard(25);
     const [phase, setPhase] = useState<null | 'preparing' | 'uploading'>(null);
@@ -59,11 +68,11 @@ export function ImagesPanel({ projectId, images, onCrop }: { projectId: string; 
                 <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
                     <h2 className="studio-h2">{t('studio.edit.images')} <span className="muted">({num(images.length)})</span></h2>
                     <div style={{ marginInlineStart: 'auto', display: 'flex', gap: 8 }}>
-                        {images.length > 1 && <Button size="sm" variant="ghost" icon={<Shuffle size={15} />} label={t('studio.edit.shuffle')} tooltip={t('studio.edit.shuffle_hint')} isLoading={busy === 'shuffle'} onClick={shuffle} />}
+                        {!gift && images.length > 1 && <Button size="sm" variant="ghost" icon={<Shuffle size={15} />} label={t('studio.edit.shuffle')} tooltip={t('studio.edit.shuffle_hint')} isLoading={busy === 'shuffle'} onClick={shuffle} />}
                         <Button size="sm" variant="secondary" icon={<ImagePlus size={15} />} label={t('studio.edit.add_images')} onClick={() => input.current?.click()} isDisabled={phase !== null} />
                     </div>
                 </div>
-                <p className="muted" style={{ margin: 0, lineHeight: 1.8 }}>{t('studio.edit.images_hint')}</p>
+                <p className="muted" style={{ margin: 0, lineHeight: 1.8 }}>{hint}</p>
                 <input ref={input} type="file" accept="image/jpeg,image/png,image/webp" multiple hidden onChange={(e) => add(e.target.files)} />
 
                 {phase ? (
@@ -82,7 +91,8 @@ export function ImagesPanel({ projectId, images, onCrop }: { projectId: string; 
                             <div key={img.id} className={`studio-image${img.priority ? ' is-priority' : ''}`} aria-busy={busy === img.id}>
                                 <div className="studio-image-pic">
                                     <img src={img.url} alt="" loading="lazy" />
-                                    {img.priority && <span className="studio-image-rank">{num(img.priority)}</span>}
+                                    {img.priority && <span className="studio-image-rank">{gift && kind !== 'trio' ? (img.priority === 1 ? '★' : num(img.priority - 1)) : num(img.priority)}</span>}
+                                    {gift && shown && !shown.includes(img.id) && <span className="studio-image-hidden">{t('studio.edit.not_shown')}</span>}
                                     {onCrop && (
                                         <button type="button" className="studio-image-remove studio-image-crop" aria-label={t('studio.crop.open')} title={t('studio.crop.open')} onClick={() => onCrop(img)}>
                                             <Crop size={14} />
@@ -92,10 +102,10 @@ export function ImagesPanel({ projectId, images, onCrop }: { projectId: string; 
                                         <Trash2 size={14} />
                                     </button>
                                 </div>
-                                <div className="studio-prio" role="radiogroup" aria-label={t('studio.edit.priority')}>
-                                    {[1, 2, 3].map((n) => (
+                                <div className={`studio-prio${gift ? " is-gift" : ""}`} role="radiogroup" aria-label={t("studio.edit.priority")}>
+                                    {ranks.map((n) => (
                                         <button key={n} type="button" role="radio" aria-checked={img.priority === n} className={img.priority === n ? 'is-on' : ''}
-                                            title={t('studio.edit.priority_label', { n: num(n) })} onClick={() => setPriority(img, n)}>{num(n)}</button>
+                                            title={gift ? rankLabel(n) : t('studio.edit.priority_label', { n: num(n) })} onClick={() => setPriority(img, n)}>{rankLabel(n)}</button>
                                     ))}
                                     <button type="button" role="radio" aria-checked={!img.priority} className={!img.priority ? 'is-on' : ''} onClick={() => setPriority(img, null)}>
                                         {t('studio.edit.priority_none')}

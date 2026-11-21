@@ -5,11 +5,11 @@ export interface StudioCrop { x: number; y: number; zoom: number }
 export interface StudioImage { id: number; width: number; height: number; bytes: number; priority: 1 | 2 | 3 | null; crop: StudioCrop | null; url: string }
 
 /** A picture's window on the page, in points: the part of its cell outside the white card; cx, cy = the middle of what shows. */
-export interface StudioWindow { id: number; x: number; y: number; w: number; h: number; cx: number; cy: number }
+export interface StudioWindow { id: number; x: number; y: number; w: number; h: number; cx: number; cy: number; slot?: 'hero' | 'thumb' | 'panel' }
 
 export interface StudioProject {
     id: string;
-    kind: 'project' | 'image';
+    kind: 'project' | 'image' | 'trio';
     client: string;
     title: string;
     status: 'draft' | 'approved';
@@ -23,13 +23,17 @@ export interface StudioProject {
     // the editor's full copy
     description?: string;
     desc_size?: number | null;
-    desc_align?: 'justify' | 'center' | null;
+    desc_align?: 'justify' | 'center' | 'right' | null;
     details_url?: string;
     details_label?: string;
     stats?: StudioStat[];
     layout_seed?: number;
     images?: StudioImage[];
     windows?: StudioWindow[];
+    // the gift page's own
+    color?: string;
+    logo?: string | null;
+    logo_box?: { x: number; y: number; w: number; h: number } | null;
 }
 
 export interface StudioVersion {
