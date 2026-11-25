@@ -14,6 +14,7 @@ Route::name('studio.')->group(function () {
     Route::get('/login', [AccessController::class, 'show'])->name('login');
     Route::post('/login', [AccessController::class, 'login'])->middleware('throttle:10,1')->name('login.attempt');
     Route::post('/logout', [AccessController::class, 'logout'])->name('logout');
+    Route::get('/sso', [AccessController::class, 'sso'])->middleware('throttle:30,1')->name('sso');
 
     Route::middleware('studio')->group(function () {
         Route::get('/', [ProjectController::class, 'index'])->name('index');
